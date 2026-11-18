@@ -1,0 +1,6 @@
+{
+  "title": "Icon Islands",
+  "description": "Your desktop icons grow their own islands",
+  "accent": ["#f0dcaa", "#18b6ca"],
+  "usesIcons": true
+}

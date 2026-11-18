@@ -67,10 +67,21 @@ function render() {
 
     const thumb = document.createElement("div");
     thumb.className = "thumb";
-    const art = document.createElement("div");
-    art.className = "art";
+    // Static screenshot by default. Falls back to a gradient when no thumb.png exists.
     const [a, b] = w.accent;
-    art.style.background = `radial-gradient(circle at 30% 25%, ${a}cc, transparent 60%), radial-gradient(circle at 75% 80%, ${b}cc, transparent 55%), #0d0f12`;
+    const art = document.createElement("img");
+    art.className = "art";
+    art.alt = "";
+    art.draggable = false;
+    const base = w.url.replace(/index\.html$/, "thumb");
+    const tries = [base + ".jpg", base + ".png"];
+    art.onerror = () => {
+      const next = tries.shift();
+      if (next) { art.src = next; return; }
+      art.removeAttribute("src");
+      art.style.background = `radial-gradient(circle at 30% 25%, ${a}cc, transparent 60%), radial-gradient(circle at 75% 80%, ${b}cc, transparent 55%), #0d0f12`;
+    };
+    art.onerror();
     thumb.append(art);
     thumb.insertAdjacentHTML("beforeend", '<span class="badge">WEB</span>');
     if (w.id === state.active) thumb.insertAdjacentHTML("beforeend", '<span class="badge live">ACTIVE</span>');
@@ -87,16 +98,18 @@ function render() {
       thumb.append(del);
     }
 
-    // Live preview only while hovering, so idle library pages cost nothing.
+    // Live preview only while hovering, so idle library cards cost no CPU.
     let hoverTimer;
     card.onmouseenter = () => {
       hoverTimer = setTimeout(() => {
         if (thumb.querySelector("iframe")) return;
         const f = document.createElement("iframe");
-        f.src = w.url;
         f.tabIndex = -1;
-        thumb.insertBefore(f, art.nextSibling);
-      }, 350);
+        f.title = w.title;
+        f.onload = () => f.classList.add("live");
+        f.src = w.url;
+        thumb.insertBefore(f, thumb.querySelector(".badge"));
+      }, 200);
     };
     card.onmouseleave = () => {
       clearTimeout(hoverTimer);

@@ -57,7 +57,7 @@ my-wallpaper/
 - [x] Library UI: sidebar (All / Gallery / My Wallpapers), search, grid, hover preview
 - [x] Set or stop a wallpaper behind the desktop icons (old and new Win11 layouts)
 - [x] Import an `.html` file or a folder, delete user wallpapers
-- [x] 6 built-in wallpapers, remembers the last wallpaper
+- [x] 4 built-in wallpapers (Icon Islands, Koi Pond, Particle Network, Starfield), remembers the last wallpaper
 - [x] `app.py` dev menu
 
 **M2 — Quality and performance (needed before the Store)**

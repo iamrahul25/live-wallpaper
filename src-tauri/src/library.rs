@@ -7,7 +7,7 @@ use tauri::{AppHandle, Manager};
 
 #[derive(Serialize, Clone)]
 pub struct WallpaperInfo {
-    /// "<source>/<folder>", e.g. "builtin/matrix-rain"
+    /// "<source>/<folder>", e.g. "builtin/koi-pond"
     pub id: String,
     pub source: String,
     pub title: String,
@@ -21,6 +21,9 @@ struct Meta {
     title: Option<String>,
     description: Option<String>,
     accent: Option<[String; 2]>,
+    /// Wallpaper wants desktop icon positions (`window.__lwIcons` / `GET /__icons`).
+    #[serde(rename = "usesIcons", default, skip_serializing_if = "Option::is_none")]
+    uses_icons: Option<bool>,
 }
 
 const PALETTE: [&str; 6] = ["#6aa8ff", "#8b7bff", "#ff6b9a", "#ffb84d", "#3ddc97", "#4cc9f0"];
@@ -100,6 +103,16 @@ pub fn resolve(app: &AppHandle, id: &str) -> Result<PathBuf, String> {
     }
 }
 
+/// True when the wallpaper's `wallpaper.json` sets `"usesIcons": true`.
+pub fn uses_icons(app: &AppHandle, id: &str) -> bool {
+    resolve(app, id)
+        .ok()
+        .and_then(|d| fs::read_to_string(d.join("wallpaper.json")).ok())
+        .and_then(|s| serde_json::from_str::<Meta>(&s).ok())
+        .and_then(|m| m.uses_icons)
+        .unwrap_or(false)
+}
+
 fn slug(s: &str) -> String {
     let s: String = s
         .to_lowercase()
@@ -154,7 +167,7 @@ pub fn import(app: &AppHandle, path: &str) -> Result<WallpaperInfo, String> {
     }
 
     if !dest.join("wallpaper.json").exists() {
-        let meta = Meta { title: Some(name), description: Some("Added by you".into()), accent: None };
+        let meta = Meta { title: Some(name), description: Some("Added by you".into()), ..Default::default() };
         let _ = fs::write(dest.join("wallpaper.json"), serde_json::to_string_pretty(&meta).unwrap());
     }
     let folder = dest.file_name().unwrap().to_string_lossy().to_string();

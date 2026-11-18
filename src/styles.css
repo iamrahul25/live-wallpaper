@@ -106,11 +106,13 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; }
 }
 .card:hover .thumb { transform: translateY(-2px); border-color: #ffffff30; }
 .card.active .thumb { border-color: var(--accent); }
-.thumb .art { position: absolute; inset: 0; }
+.thumb .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .thumb iframe {
   position: absolute; left: 0; top: 0; border: 0; pointer-events: none;
   width: 400%; height: 400%; transform: scale(.25); transform-origin: 0 0;
+  opacity: 0; transition: opacity .3s ease;
 }
+.thumb iframe.live { opacity: 1; }
 .badge {
   position: absolute; left: 10px; top: 10px; z-index: 2;
   font-size: 10px; font-weight: 700; letter-spacing: .08em;

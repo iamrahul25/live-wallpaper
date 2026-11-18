@@ -3,11 +3,15 @@
 
 #[cfg(windows)]
 mod desktop;
+#[cfg(windows)]
+mod icons;
 mod library;
 
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::http::Response;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -18,6 +22,46 @@ const WALLPAPER_LABEL: &str = "wallpaper";
 #[derive(Default)]
 struct AppState {
     active: Mutex<Option<String>>,
+    /// The active wallpaper asked for desktop icon positions, so the poller is running.
+    icons_on: AtomicBool,
+    /// Latest icon snapshot; served to pages at `/__icons`. Empty until first read.
+    icons_json: Mutex<String>,
+}
+
+fn icons_snapshot() -> String {
+    #[cfg(windows)]
+    {
+        icons::snapshot_json()
+    }
+    #[cfg(not(windows))]
+    {
+        String::new()
+    }
+}
+
+/// Polls Explorer for icon positions (only while an icon-aware wallpaper is active) and pushes
+/// changes into the wallpaper page. Pages also pull the latest snapshot on load.
+fn start_icon_poller(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last = String::new();
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let st = app.state::<AppState>();
+            if !st.icons_on.load(Ordering::Relaxed) {
+                last.clear();
+                continue;
+            }
+            let json = icons_snapshot();
+            if json == last {
+                continue;
+            }
+            last = json.clone();
+            *st.icons_json.lock().unwrap() = json.clone();
+            if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
+                let _ = win.eval(format!("window.__lwIcons&&window.__lwIcons({json})"));
+            }
+        }
+    });
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -54,7 +98,16 @@ fn set_active(app: &AppHandle, id: Option<String>) {
 /// Shows `id` on the desktop, creating and embedding the wallpaper window on first use.
 fn show_wallpaper(app: &AppHandle, id: &str) -> Result<(), String> {
     library::resolve(app, id)?;
-    let url = library::url_for(id).parse::<tauri::Url>().map_err(|e| e.to_string())?;
+    let wants_icons = library::uses_icons(app, id);
+    {
+        let st = app.state::<AppState>();
+        if wants_icons {
+            // Fresh snapshot first, so the page's initial pull already has real positions.
+            *st.icons_json.lock().unwrap() = icons_snapshot();
+        }
+        st.icons_on.store(wants_icons, Ordering::Relaxed);
+    }
+    let url =library::url_for(id).parse::<tauri::Url>().map_err(|e| e.to_string())?;
 
     if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
         win.navigate(url).map_err(|e| e.to_string())?;
@@ -82,6 +135,7 @@ fn show_wallpaper(app: &AppHandle, id: &str) -> Result<(), String> {
 }
 
 fn stop(app: &AppHandle) {
+    app.state::<AppState>().icons_on.store(false, Ordering::Relaxed);
     if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
         let _ = win.destroy();
         #[cfg(windows)]
@@ -139,6 +193,16 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .register_uri_scheme_protocol("lw", |ctx, request| {
+            if request.uri().path() == "/__icons" {
+                let json = ctx.app_handle().state::<AppState>().icons_json.lock().unwrap().clone();
+                // `demo` tells the page nobody has read the desktop yet (e.g. a library preview).
+                let body = if json.is_empty() { "{\"demo\":true}".to_string() } else { json };
+                return Response::builder()
+                    .header("Content-Type", "application/json")
+                    .header("Cache-Control", "no-store")
+                    .body(body.into_bytes())
+                    .unwrap();
+            }
             match library::serve(ctx.app_handle(), request.uri().path()) {
                 Some((body, mime)) => Response::builder()
                     .header("Content-Type", mime)
@@ -181,6 +245,8 @@ fn main() {
                     }
                 })
                 .build(app)?;
+
+            start_icon_poller(app.handle().clone());
 
             // Restore the last wallpaper.
             if let Some(id) = load_settings(app.handle()).active {

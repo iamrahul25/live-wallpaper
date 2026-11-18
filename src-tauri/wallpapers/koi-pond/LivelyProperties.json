@@ -1,0 +1,34 @@
+{
+  "quality": {
+    "type": "dropdown",
+    "value": 2,
+    "text": "Render quality",
+    "items": ["Low", "Medium", "High", "Ultra"]
+  },
+  "fps": {
+    "type": "slider",
+    "value": 60,
+    "text": "Frame rate cap",
+    "min": 20,
+    "max": 144,
+    "step": 1
+  },
+  "koi": {
+    "type": "slider",
+    "value": 8,
+    "text": "Number of koi",
+    "min": 1,
+    "max": 14,
+    "step": 1
+  },
+  "lotus": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Lotus flowers"
+  },
+  "calmLeft": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Keep the left side calm for desktop icons"
+  }
+}
