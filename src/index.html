@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Live Wallpaper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo"></span>
+      <span>Live Wallpaper</span>
+    </div>
+
+    <div class="nav-label">Library</div>
+    <nav id="nav">
+      <button class="nav-item active" data-filter="all">
+        <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
+        <span>All wallpapers</span><em id="count-all">0</em>
+      </button>
+      <button class="nav-item" data-filter="builtin">
+        <svg viewBox="0 0 24 24"><path d="M5 7h14l-1 13H6zM9 7V5a3 3 0 0 1 6 0v2"/></svg>
+        <span>Gallery</span><em id="count-builtin">0</em>
+      </button>
+      <button class="nav-item" data-filter="user">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+        <span>My Wallpapers</span><em id="count-user">0</em>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="now-playing">
+        <div class="np-label">Now on desktop</div>
+        <div class="np-title" id="np-title">Nothing</div>
+      </div>
+      <button class="btn ghost" id="stop-btn" disabled>Stop wallpaper</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">All wallpapers</h1>
+        <p id="page-sub">Everything on this PC: built-in, or added by you. Click a wallpaper to set it.</p>
+      </div>
+      <div class="actions">
+        <label class="search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="search" type="search" placeholder="Search library" />
+        </label>
+        <div class="add-wrap">
+          <button class="btn primary" id="add-btn">+ Add wallpaper</button>
+          <div class="menu" id="add-menu" hidden>
+            <button data-kind="file">HTML file…</button>
+            <button data-kind="folder">Folder with index.html…</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="grid" id="grid"></section>
+    <div class="empty" id="empty" hidden>
+      <p>No wallpapers here yet.</p>
+      <p class="muted">Add an <code>.html</code> file or a folder containing <code>index.html</code>.</p>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="main.js"></script>
+</body>
+</html>

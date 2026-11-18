@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Matrix Rain</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style>
+</head><body><canvas id="c"></canvas>
+<script>
+const c = document.getElementById("c"), x = c.getContext("2d");
+const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF";
+const size = 18; let cols, drops;
+function resize() {
+  c.width = innerWidth; c.height = innerHeight;
+  cols = Math.ceil(c.width / size);
+  drops = Array.from({ length: cols }, () => Math.random() * -50);
+}
+addEventListener("resize", resize); resize();
+let last = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (t - last < 50) return; // ~20 fps is plenty, saves CPU
+  last = t;
+  x.fillStyle = "rgba(0,0,0,0.08)"; x.fillRect(0, 0, c.width, c.height);
+  x.font = size + "px monospace";
+  for (let i = 0; i < cols; i++) {
+    const ch = chars[(Math.random() * chars.length) | 0];
+    const y = drops[i] * size;
+    x.fillStyle = Math.random() > 0.975 ? "#d6ffe0" : "#22e06b";
+    x.fillText(ch, i * size, y);
+    if (y > c.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+requestAnimationFrame(frame);
+</script></body></html>

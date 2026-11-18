@@ -1,0 +1,15 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Aurora</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#05060f}
+.blob{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:.55;mix-blend-mode:screen;will-change:transform}
+.a{background:#3ddc97;left:-10vmax;top:-20vmax;animation:m1 22s ease-in-out infinite alternate}
+.b{background:#6a5cff;right:-15vmax;top:-10vmax;animation:m2 26s ease-in-out infinite alternate}
+.c{background:#ff6b9a;left:20vmax;bottom:-30vmax;animation:m3 30s ease-in-out infinite alternate}
+.d{background:#4cc9f0;right:5vmax;bottom:-25vmax;animation:m1 34s ease-in-out infinite alternate-reverse}
+@keyframes m1{to{transform:translate(25vmax,15vmax) scale(1.2)}}
+@keyframes m2{to{transform:translate(-20vmax,20vmax) scale(.85)}}
+@keyframes m3{to{transform:translate(10vmax,-25vmax) scale(1.15)}}
+.grain{position:absolute;inset:0;background:radial-gradient(transparent 60%,#0008)}
+</style></head>
+<body><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div><div class="grain"></div></body></html>
