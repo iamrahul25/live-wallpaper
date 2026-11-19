@@ -1,0 +1,48 @@
+{
+  "palette": {
+    "type": "dropdown",
+    "value": 0,
+    "text": "Palette",
+    "items": ["Ember & Cobalt", "Bone & Ash", "Blood Moon", "Witchfire", "Frost"]
+  },
+  "pixel": {
+    "type": "slider",
+    "value": 2,
+    "text": "Particle size (scales with resolution)",
+    "min": 1,
+    "max": 4,
+    "step": 1
+  },
+  "boil": {
+    "type": "slider",
+    "value": 60,
+    "text": "Particle shimmer",
+    "min": 0,
+    "max": 100,
+    "step": 1
+  },
+  "embers": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Drifting embers"
+  },
+  "glitch": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Glitch streaks"
+  },
+  "position": {
+    "type": "dropdown",
+    "value": 0,
+    "text": "Subject position",
+    "items": ["Right", "Centre", "Left"]
+  },
+  "fps": {
+    "type": "slider",
+    "value": 30,
+    "text": "Frame rate cap",
+    "min": 12,
+    "max": 60,
+    "step": 1
+  }
+}
