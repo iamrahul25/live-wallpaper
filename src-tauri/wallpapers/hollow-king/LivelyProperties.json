@@ -16,7 +16,7 @@
   "boil": {
     "type": "slider",
     "value": 60,
-    "text": "Particle shimmer",
+    "text": "Particle flow",
     "min": 0,
     "max": 100,
     "step": 1
@@ -28,7 +28,7 @@
   },
   "glitch": {
     "type": "checkbox",
-    "value": true,
+    "value": false,
     "text": "Glitch streaks"
   },
   "position": {

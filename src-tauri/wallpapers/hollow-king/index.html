@@ -49,7 +49,7 @@ const S = {
   px: clamp(Math.round(+params.get("px") || QPX[params.get("q")] || 2), 1, 4),
   boil: params.has("boil") ? clamp(+params.get("boil") / 100, 0, 1) : .6,
   embers: params.get("embers") !== "0",
-  glitch: params.get("glitch") !== "0",
+  glitch: params.get("glitch") === "1",                 // off by default: the piece is meant to be calm
   pos: Math.max(0, POS.indexOf(params.get("pos") === "center" ? "centre" : params.get("pos"))),
   fps: clamp(+params.get("fps") || 30, 10, 240),
 };
@@ -76,59 +76,94 @@ float noise3(vec3 x){
   return mix(mix(mix(hash3(i), hash3(i + vec3(1, 0, 0)), f.x), mix(hash3(i + vec3(0, 1, 0)), hash3(i + vec3(1, 1, 0)), f.x), f.y),
              mix(mix(hash3(i + vec3(0, 0, 1)), hash3(i + vec3(1, 0, 1)), f.x), mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
-vec3 toObj(vec3 p){ p.xz = rot(uYaw)*p.xz; return p; }
+float hash1(float n){ return fract(sin(n*127.1)*43758.5453); }
+// tapered capsule (iq's round cone)
+float sdRC(vec3 p, vec3 a, vec3 b, float r1, float r2){
+  vec3 ba = b - a; float l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr*rr, il2 = 1./l2;
+  vec3 pa = p - a; float y = dot(pa, ba), z = y - l2;
+  vec3 xv = pa*l2 - ba*y; float x2 = dot(xv, xv), y2 = y*y*l2, z2 = z*z*l2;
+  float k = sign(rr)*rr*rr*x2;
+  if (sign(z)*a2*z2 > k) return sqrt(x2 + z2)*il2 - r2;
+  if (sign(y)*a2*y2 < k) return sqrt(x2 + y2)*il2 - r1;
+  return (sqrt(x2*a2*il2) + y*rr)*il2 - r1;
+}
+// the head is turned toward the empty side and tipped forward, so the brow shades the eyes
+const float PITCH = -.12;
+vec3 toObj(vec3 p){ p.xz = rot(uYaw)*p.xz; p.yz = rot(PITCH)*p.yz; return p; }
 
-// a row of teeth around an arch centred at z = zc
-float teeth(vec3 p, float y, float R, float zc, float h){
-  float a = atan(p.x, p.z - zc), sec = .21;
+// a row of teeth around an arch centred at z = zc; dir 1 = upper (points down), -1 = lower.
+// The canines are long tapered fangs.
+float teeth(vec3 p, float y, float R, float zc, float h, float dir){
+  float a = atan(p.x, p.z - zc), sec = .2;
   float id = clamp(floor(a/sec + .5), -5., 5.), ai = id*sec;
-  float w = mix(.036, .05, smoothstep(1.5, 4., abs(id)));
-  return sdE(p - vec3(sin(ai)*R, y, zc + cos(ai)*R), vec3(w, h, .042));
+  float fang = step(abs(abs(id) - 2.), .5);
+  float hh = h*(1. + 1.3*fang);
+  float w = mix(.033, .046, smoothstep(2.5, 4., abs(id)))*(1. - .2*fang);
+  vec3 lp = p - vec3(sin(ai)*R, y - dir*(hh - h)*.8, zc + cos(ai)*R);
+  float tip = clamp(.5 - dir*lp.y/(2.*hh), 0., 1.);
+  lp.xz /= 1. - .6*tip;
+  return sdE(lp, vec3(w, hh, .04))*(1. - .6*tip);
 }
 
 float bone(vec3 p){
   vec3 q = vec3(abs(p.x), p.y, p.z);
-  float d = sdE(p - vec3(0., .42, -.22), vec3(.74, .78, .95));                       // braincase
-  d = smin(d, sdE(p - vec3(0., .25, .25), vec3(.64, .62, .52)), .18);                 // forehead
-  d = smin(d, sdE(p - vec3(0., -.05, -.30), vec3(.64, .45, .70)), .2);                // lower braincase, behind the cheeks
-  d = smax(d, q.x - .78, .3);                                                         // slightly flatter temples
-  d = smin(d, sdCap(q, vec3(.06, .01, .64), vec3(.44, .04, .48), .07), .08);          // brow ridge, overhanging
-  d = smin(d, sdE(q - vec3(.40, -.29, .40), vec3(.14, .11, .17)), .08);               // cheekbones
-  d = smin(d, sdCap(q, vec3(.48, -.28, .30), vec3(.60, -.25, -.10), .04), .1);        // zygomatic arch
-  d = smin(d, sdE(p - vec3(0., -.35, .34), vec3(.33, .26, .30)), .12);                // upper jaw
-  d = smax(d, -sdE(q - vec3(.24, -.135, .60), vec3(.165, .135, .46)), .05);           // eye sockets, deep and wider than tall
-  d = smax(d, -sdE(q - vec3(.04, -.37, .66), vec3(.05, .11, .24)), .03);              // nose
-  d = smax(d, -sdE(q - vec3(.36, -.52, .52), vec3(.12, .12, .1)), .06);               // sunken cheeks
+  float d = sdE(p - vec3(0., .36, -.24), vec3(.70, .68, .90));                       // braincase
+  d = smin(d, sdE(p - vec3(0., .22, .20), vec3(.60, .58, .50)), .16);                 // forehead
+  d = smin(d, sdE(p - vec3(0., -.05, -.30), vec3(.62, .45, .68)), .2);                // lower braincase
+  d = smax(d, q.x - .76, .3);
+  d = smax(d, -sdE(q - vec3(.72, .05, .02), vec3(.12, .26, .3)), .1);                // temple hollows
+  d = smin(d, sdCap(q, vec3(.05, -.04, .65), vec3(.46, .08, .47), .078), .07);        // brow ridge, a V down to the nose
+  d = smin(d, sdE(q - vec3(.42, -.27, .38), vec3(.15, .10, .17)), .06);               // sharp cheekbones
+  d = smin(d, sdCap(q, vec3(.48, -.27, .28), vec3(.60, -.24, -.10), .042), .08);      // zygomatic arch
+  d = smin(d, sdE(p - vec3(0., -.36, .33), vec3(.34, .27, .30)), .1);                 // upper jaw
+  vec3 e = q - vec3(.24, -.15, .60); e.xy = rot(-.34)*e.xy;
+  d = smax(d, -sdE(e, vec3(.17, .115, .46)), .035);                                   // slanted, angry sockets
+  d = smax(d, -sdE(q - vec3(.036, -.38, .66), vec3(.05, .12, .24)), .025);            // nose
+  d = smax(d, -sdE(q - vec3(.34, -.52, .50), vec3(.13, .14, .12)), .05);              // gaunt cheeks
   d = smax(d, -sdE(q - vec3(.60, -.50, .06), vec3(.12, .16, .26)), .08);              // under the arch
-  d = min(d, teeth(p, -.65, .28, .17, .055));
-  vec3 j = p + vec3(0., -.045, 0.), jq = vec3(abs(j.x), j.y, j.z);                   // lower jaw, shortened face
-  float m = sdE(j - vec3(0., -1.0, .36), vec3(.20, .12, .13));
-  m = smin(m, sdCap(jq, vec3(.10, -.94, .36), vec3(.40, -.86, .04), .08), .1);
-  m = smin(m, sdCap(jq, vec3(.42, -.86, .03), vec3(.50, -.40, -.12), .06), .08);
+  float cx = .24 + .07*sin(p.y*11.) + .03*sin(p.y*29. + 1.);                          // a crack from the crown to the brow
+  float crack = max(max(abs(p.x - cx) - .012, abs(p.y - .36) - .3), .2 - p.z);
+  d = smax(d, -crack, .008);
+  d = min(d, teeth(p, -.66, .28, .17, .052, 1.));
+  vec3 j = p + vec3(0., .085, 0.), jq = vec3(abs(j.x), j.y, j.z);                    // jaw dropped into a snarl
+  float m = sdE(j - vec3(0., -1.0, .37), vec3(.17, .12, .13));
+  m = smin(m, sdCap(jq, vec3(.10, -.97, .35), vec3(.46, -.86, .0), .085), .1);
+  m = smin(m, sdCap(jq, vec3(.47, -.86, -.01), vec3(.52, -.36, -.12), .065), .08);
   m = smin(m, sdE(j - vec3(0., -.87, .24), vec3(.28, .07, .22)), .06);
-  m = min(m, teeth(j, -.79, .26, .15, .05));
+  m = min(m, teeth(j, -.78, .26, .15, .048, -1.));
   d = min(d, m);
   d = min(d, sdCap(p, vec3(0., -.6, -.42), vec3(0., -1.6, -.46), .13) - .03*sin(p.y*30.));   // neck
   return d;
 }
 
+// horns grow from the temples, sweep out and back, then hook up and forward
+float horn(vec3 q){
+  vec3 a = vec3(.58, .50, -.12), b = vec3(.92, .62, -.28), c = vec3(1.15, .90, -.32), e = vec3(1.24, 1.16, -.20), f = vec3(1.16, 1.38, .02);
+  float d = sdRC(q, a, b, .13, .11);
+  d = smin(d, sdRC(q, b, c, .11, .085), .04);
+  d = smin(d, sdRC(q, c, e, .085, .055), .03);
+  d = smin(d, sdRC(q, e, f, .055, .008), .02);
+  return d - .008*sin(length(q - a)*48.);                                             // growth ridges
+}
+
+// iron crown of thorn blades, uneven, a few snapped off, leaning outward
 vec2 crown(vec3 p){
-  p -= vec3(0., .56, -.17);
-  p.xy = rot(-.10)*p.xy;
-  p.yz = rot(.05)*p.yz;
+  p -= vec3(0., .52, -.18);
+  p.xy = rot(-.12)*p.xy;
+  p.yz = rot(.04)*p.yz;
   vec2 xz = vec2(p.x, p.z*.84);
   float r = length(xz);
-  float d = max(abs(r - .77) - .045, abs(p.y) - .14);                                 // band
-  d = min(d, max(abs(r - .79) - .062, abs(abs(p.y) - .12) - .022));                    // rims
-  float ang = atan(xz.x, xz.y), sec = 6.2831853/12.;
+  float d = max(abs(r - .77) - .04, abs(p.y) - .12);                                  // band
+  d = min(d, max(abs(r - .79) - .055, abs(abs(p.y) - .10) - .02));                     // rims
+  float ang = atan(xz.x, xz.y), sec = 6.2831853/14.;
   float id = floor(ang/sec + .5), a = ang - id*sec;
+  float hh = hash1(id + 3.), tall = hh < .18 ? .12 : .3 + .38*hh;
   vec2 lc = vec2(r*sin(a), r*cos(a) - .78);
-  float tall = mod(id, 2.) < .5 ? .44 : .26, py = p.y - .12;
-  float tri = max(abs(lc.x) - .12*(1. - py/tall), max(-py, py - tall));
-  d = min(d, max(tri, abs(lc.y) - .03)*.7);                                            // points
-  d = min(d, length(vec3(lc.x, py - tall - .035, lc.y)) - .045);                      // finials
-  float a2 = ang - (floor(ang/sec) + .5)*sec;
-  float gem = sdE(vec3(r*sin(a2), p.y, r*cos(a2) - .815), vec3(.055, .065, .035));
+  float py = p.y - .10;
+  float tri = max(abs(lc.x + .02*sin(py*9.)) - .085*(1. - py/tall), max(-py, py - tall));
+  d = min(d, max(tri, abs(lc.y - py*.16) - .022)*.6);                                  // thorn blades
+  float gid = floor(ang/sec), a2 = ang - (gid + .5)*sec;
+  float gem = mod(gid, 3.) < .5 ? sdE(vec3(r*sin(a2), p.y, r*cos(a2) - .82), vec3(.05, .06, .032)) : 1e3;
   return gem < d ? vec2(gem, 3.) : vec2(d, 2.);
 }
 
@@ -144,6 +179,7 @@ float mantle(vec3 p){
 vec2 map(vec3 p){
   p = toObj(p);
   vec2 r = vec2(bone(p), 1.);
+  float h = horn(vec3(abs(p.x), p.y, p.z)); if (h < r.x) r = vec2(h, 5.);
   vec2 c = crown(p); if (c.x < r.x) r = c;
   float m = mantle(p); if (m < r.x) r = vec2(m, 4.);
   vec3 md = p - vec3(0., -1.95, .56);                                                  // medallion
@@ -181,30 +217,32 @@ void main(){
   vec3 roO = toObj(ro), rdO = toObj(rd);
   float eg = 0.;
   for (int k = 0; k < 2; k++) {
-    vec3 e = vec3(k == 0 ? .25 : -.25, -.13, .5);
+    vec3 e = vec3(k == 0 ? .24 : -.24, -.16, .48);
     float tc = dot(e - roO, rdO), dm = length(roO + rdO*tc - e);
-    eg += exp(-dm*dm*1100.)*.9*(hit ? smoothstep(-.3, -.05, t - tc) : 1.);
+    eg += (exp(-dm*dm*1400.) + exp(-dm*dm*110.)*.07)*(hit ? smoothstep(-.3, -.05, t - tc) : 1.);
   }
   if (!hit) { o = vec4(0., 0., clamp(eg, 0., 1.), 0.); return; }
   vec3 p = ro + rd*t, n = nor(p), v = -rd, pO = toObj(p), nO = toObj(n);
   float occ = occl(p, n);
-  vec3 L1 = normalize(vec3(.8, .75, .55)), L2 = normalize(vec3(-.7, .2, .7)), L3 = normalize(vec3(-.5, .45, -.75));
+  // hard top light: brow, cheekbones, crown and horns catch fire; the face falls into cobalt
+  vec3 L1 = normalize(vec3(.55, 1., .32)), L2 = normalize(vec3(-.7, .1, .7)), L3 = normalize(vec3(-.5, .45, -.75));
   float alb, spw = 16., spk = .15, wk = 1.;
-  if (mat < 1.5) alb = .82 + .18*noise3(pO*16.);                                            // bone
-  else if (mat < 2.5) { alb = .62 + .2*noise3(pO*30.); spw = 28.; spk = .9; }               // iron
+  if (mat < 1.5) alb = .8 + .2*noise3(pO*16.);                                              // bone
+  else if (mat < 2.5) { alb = .5 + .2*noise3(pO*30.); spw = 30.; spk = 1.1; }               // black iron
   else if (mat < 3.5) { alb = .4; spk = 1.; spw = 40.; }                                    // gems
-  else { alb = .34 + .4*noise3(pO*vec3(9., 22., 9.)); spk = .05; wk = .25; }                // fur: mostly in cool light
+  else if (mat < 4.5) { alb = .34 + .4*noise3(pO*vec3(9., 22., 9.)); spk = .05; wk = .17; } // fur: mostly in cool light
+  else { alb = .55 + .3*noise3(pO*vec3(20., 6., 20.)); spk = .35; spw = 20.; }              // horn
   float dif = max(dot(n, L1), 0.);
   float sh = dif > 0. ? shadow(p + n*.01, L1) : 0.;
   float spec = pow(max(dot(reflect(-L1, n), v), 0.), spw)*spk;
-  float warm = (alb*dif*1.15*wk + spec)*sh*mix(.35, 1., occ);
-  for (int k = 0; k < 2; k++) {                                                             // faint ember light in the sockets
-    vec3 l = vec3(k == 0 ? .25 : -.25, -.13, .5) - pO; float dd = length(l);
-    warm += alb*max(dot(nO, l/dd), 0.)*.05/(1. + dd*dd*90.);
+  float warm = (alb*dif*1.2*wk + spec)*sh*mix(.3, 1., occ);
+  for (int k = 0; k < 2; k++) {                                                             // ember light licking the socket floor
+    vec3 l = vec3(k == 0 ? .24 : -.24, -.16, .48) - pO; float dd = length(l);
+    warm += alb*max(dot(nO, l/dd), 0.)*.08/(1. + dd*dd*110.);
   }
-  float fill = max(dot(n, L2), 0.)*.5, fres = pow(1. - max(dot(n, v), 0.), 3.);
-  float rim = fres*max(dot(n, L3) + .35, 0.)*1.1;
-  float cool = (alb*(fill + .1) + rim*.8)*occ;
+  float fill = max(dot(n, L2), 0.)*.32, fres = pow(1. - max(dot(n, v), 0.), 3.);
+  float rim = fres*max(dot(n, L3) + .35, 0.)*1.2;
+  float cool = (alb*(fill + .08) + rim*.85)*occ;
   float gem = mat > 2.5 && mat < 3.5 ? .65 + .35*dif : 0.;
   o = vec4(clamp(warm, 0., 1.), clamp(cool, 0., 1.), clamp(eg, 0., 1.), gem);
 }`;
@@ -218,33 +256,38 @@ out vec4 o;
 void main(){
   vec4 b = texelFetch(uBake, ivec2(gl_FragCoord.xy), 0);
   vec2 uv = gl_FragCoord.xy/uRes;
-  float wav = sin(uv.y*7. + uT*2.3)*sin(uv.x*5. - uT*1.7);
-  float W = b.r*uFlame*(.94 + .06*wav) + b.b*uEye;
+  float wav = sin(uv.y*5. - uT*.55)*sin(uv.x*3. + uT*.35);              // slow rolling light, like a distant fire
+  float W = b.r*uFlame*(.95 + .05*wav) + b.b*uEye;
   o = vec4(W, b.g, b.a, 1.);
 }`;
 
+// embers (warm) and ash (cool), one particle each
 const EMB_VS = `#version 300 es
-in vec3 aP;
+in vec4 aP;
 uniform vec2 uRes;
-out float vB;
-void main(){ vB = aP.z; gl_Position = vec4((floor(aP.xy) + .5)/uRes*2. - 1., 0., 1.); gl_PointSize = 1.; }`;
+out vec2 vC;
+void main(){ vC = aP.zw; gl_Position = vec4((floor(aP.xy) + .5)/uRes*2. - 1., 0., 1.); gl_PointSize = 1.; }`;
 const EMB_FS = `#version 300 es
 precision highp float;
-in float vB;
+in vec2 vC;
 out vec4 o;
-void main(){ o = vec4(vB, vB*.08, 0., 0.); }`;
+void main(){ o = vec4(vC, 0., 0.); }`;
 
 const PAL = `#version 300 es
 precision highp float;
 uniform sampler2D uLight;
-uniform vec2 uGrid, uCenter;
-uniform float uTick, uBoil;
+uniform vec2 uGrid;
+uniform float uT, uBoil;
 uniform vec3 uCool[5], uWarm[5], uAcc, uStray;
 uniform vec4 uGl[4];
 out vec4 o;
 const float BAY[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
 float bayer(ivec2 p){ return (BAY[(p.x & 3) + ((p.y & 3) << 2)] + .5)/16.; }
 float h21(vec2 p, float s){ vec3 p3 = fract(vec3(p.xyx)*.1031 + s*.1173); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y)*p3.z); }
+float vn(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+  return mix(mix(h21(i, 0.), h21(i + vec2(1, 0), 0.), f.x), mix(h21(i + vec2(0, 1), 0.), h21(i + vec2(1, 1), 0.), f.x), f.y);
+}
 vec3 coolRamp(float v, float th){ v = clamp(v, 0., 1.)*4.; float i = floor(v); return uCool[min(int(i) + (v - i > th ? 1 : 0), 4)]; }
 vec3 warmRamp(float v, float th){ v = clamp(v, 0., 1.)*4.; float i = floor(v); return uWarm[min(int(i) + (v - i > th ? 1 : 0), 4)]; }
 void main(){
@@ -258,18 +301,17 @@ void main(){
     }
   }
   vec2 cf = vec2(c);
-  float th = bayer(c), th2 = bayer(c + ivec2(2, 1));
-  float flip = step(h21(cf + 17.3, uTick), uBoil*.4);            // the boil: a slice of cells re-roll
-  th = mix(th, h21(cf, uTick), flip);
-  th2 = mix(th2, h21(cf + 5.7, uTick), flip);
+  // The flow: a slow noise field rising through the image shifts every cell's dither threshold.
+  // Neighbouring cells move together, so the particles drift in soft waves like heat haze
+  // instead of sparkling at random.
+  float flow = vn(cf*.035 + vec2(0., -uT*.16))*.65 + vn(cf*.09 + vec2(uT*.04, -uT*.27))*.35;
+  float th = fract(bayer(c) + uBoil*1.6*flow);
+  float th2 = fract(bayer(c + ivec2(2, 1)) + uBoil*1.2*flow + .37);
   float W = L.r, C = L.g;
   vec3 col = (W/(W + C + 1e-3) > th2 && W > .015) ? warmRamp(pow(W, .85), th) : coolRamp(pow(C, .8), th);
   if (L.b > th) col = L.b > .85 ? uWarm[3] : uAcc;
-  if (max(W, C) > .06 && h21(cf + 3.1, uTick*1.37) < .004) col = h21(cf + 9.2, uTick) < .5 ? uAcc : uStray;
-  if (W + C < .01) {                                   // dust: sparse, random, twinkling around the subject
-    vec2 dd = (cf/uGrid - uCenter)*vec2(uGrid.x/uGrid.y, 1.);
-    if (h21(cf + 11.7, floor(uTick/3.)) < .014*exp(-dot(dd, dd)*3.)) col = uCool[1];
-  }
+  float slow = floor(uT*.5);                           // rare accent pixels, held for two seconds
+  if (max(W, C) > .06 && h21(cf + 3.1, slow) < .0015) col = h21(cf + 9.2, slow) < .5 ? uAcc : uStray;
   o = vec4(col, 1.);
 }`;
 
@@ -326,7 +368,7 @@ function init() {
   gl.bindBuffer(gl.ARRAY_BUFFER, embBuf);
   gl.bufferData(gl.ARRAY_BUFFER, embData.byteLength, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
   Wd = Hd = 0;
   resize(true);
@@ -361,7 +403,7 @@ function subject() {
   const aspect = gw / gh, wide = aspect > 1.2;
   const x = !wide ? .5 : [.64, .5, .36][S.pos];
   const yaw = !wide || S.pos === 1 ? -.16 : S.pos === 0 ? -.26 : .26;
-  return { x, y: .57, yaw, aspect };
+  return { x, y: .55, yaw, aspect };
 }
 
 // Raymarched once per size, in horizontal strips so no single draw can trip the GPU watchdog.
@@ -404,37 +446,50 @@ const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 214
 const rr = (a, b) => a + (b - a) * rand();
 let time = +params.get("t") || 0, flame = 1, eye = .8;
 
-const MAXE = 200, embers = [], embData = new Float32Array(MAXE * 3);
-const emberTarget = () => (S.embers ? clamp(Math.round(70 * gh / 540), 40, MAXE) : 0);   // same look at any particle size
-function spawnEmber(anywhere) {
+// Embers (warm) rise slowly from below the king; ash (cool) drifts up across the whole dark.
+// Both move a fraction of the screen per second, sway on long sines and fade in and out.
+const MAXE = 420, embers = [], embData = new Float32Array(MAXE * 4);
+const k540 = () => gh / 540;                                                // same look at any particle size
+const emberTarget = () => (S.embers ? clamp(Math.round(55 * k540()), 30, 160) : 0);
+const ashTarget = () => clamp(Math.round(110 * k540()), 60, 260);
+function spawnParticle(ash, anywhere) {
   const s = subject();
-  const life = rr(3.5, 8);
+  const life = ash ? rr(9, 18) : rr(6, 12);
   embers.push({
-    x: s.x * gw + rr(-.42, .42) * gh, y: anywhere ? rr(.02, .9) * gh : rr(-.02, .3) * gh,
-    vx: rr(-.012, .006) * gh, vy: rr(.018, .055) * gh, ph: rr(0, 6.28), b: rr(.35, 1),
+    ash,
+    x: ash ? rr(-.05, 1.05) * gw : s.x * gw + rr(-.4, .4) * gh,
+    y: anywhere ? rr(0, 1) * gh : ash ? rr(-.05, .1) * gh : rr(-.02, .25) * gh,
+    vx: rr(-.006, .003) * gh, vy: (ash ? rr(.008, .02) : rr(.012, .032)) * gh,
+    ph: rr(0, 6.28), sw: rr(.2, .5), b: ash ? rr(.22, .4) : rr(.35, 1),
     life: anywhere ? rr(0, life) : 0, max: life,
   });
 }
-function resetEmbers() { embers.length = 0; seed = 7; for (let i = 0, n = emberTarget(); i < n; i++) spawnEmber(true); }
+function resetEmbers() {
+  embers.length = 0; seed = 7;
+  for (let i = 0, n = emberTarget(); i < n; i++) spawnParticle(false, true);
+  for (let i = 0, n = ashTarget(); i < n; i++) spawnParticle(true, true);
+}
 
 const glRows = [], glData = new Float32Array(16);
 let glNext = 3;
 
 function step(dt) {
   time += dt;
-  // flame: two slow noises, the occasional gutter
-  flame = .9 + .06 * Math.sin(time * 1.7) * Math.sin(time * .63 + 1) + .04 * Math.sin(time * 5.3 + Math.sin(time * 1.1) * 3);
-  eye = .72 + .2 * Math.sin(time * 1.25) + .08 * Math.sin(time * 3.7);
-  const target = emberTarget();
+  // the fire breathes: long, overlapping swells, nothing faster than a slow breath
+  flame = .92 + .05 * Math.sin(time * .55) + .03 * Math.sin(time * 1.3 + 1.7);
+  eye = .78 + .17 * Math.sin(time * .8) + .05 * Math.sin(time * 1.9 + .6);
+  let ne = 0, na = 0;
   for (let i = embers.length - 1; i >= 0; i--) {
     const e = embers[i];
     e.life += dt;
-    e.x += (e.vx + Math.sin(time * 1.3 + e.ph) * .006 * gh) * dt;
+    e.x += (e.vx + Math.sin(time * e.sw + e.ph) * .004 * gh) * dt;
     e.y += e.vy * dt;
-    if (e.life > e.max || e.y > gh + 2) embers.splice(i, 1);
+    if (e.life > e.max || e.y > gh + 2) { embers.splice(i, 1); continue; }
+    if (e.ash) na++; else ne++;
   }
-  while (embers.length < target) spawnEmber(false);
-  if (embers.length > target) embers.length = target;
+  for (const target = emberTarget(); ne < target; ne++) spawnParticle(false, false);
+  for (const target = ashTarget(); na < target; na++) spawnParticle(true, false);
+  if (ne > emberTarget()) { const keep = emberTarget(); let seen = 0; for (let i = embers.length - 1; i >= 0; i--) if (!embers[i].ash && ++seen > keep) embers.splice(i, 1); }
   glNext -= dt;
   if (S.glitch && glNext <= 0 && !STILL) {
     glNext = rr(4, 10);
@@ -454,7 +509,6 @@ const flat = (list) => new Float32Array(list.flatMap(hex3));
 function render() {
   if (needBake) startBake();
   bakeSome(STILL ? Infinity : 2);
-  const s = subject();
   // light buffer
   gl.bindFramebuffer(gl.FRAMEBUFFER, lightFb);
   gl.viewport(0, 0, gw, gh);
@@ -467,12 +521,13 @@ function render() {
   gl.uniform1f(P.light.u.uEye, eye);
   gl.bindVertexArray(vao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
-  // embers, one cell each, added to the warm channel
+  // embers into the warm channel, ash into the cool one, one cell each, gently fading in and out
   if (embers.length) {
     let n = 0;
     for (const e of embers) {
-      const k = e.life / e.max, fl = .75 + .25 * Math.sin(time * 9 + e.ph * 5);
-      embData[n++] = e.x; embData[n++] = e.y; embData[n++] = e.b * Math.sin(Math.PI * k) * fl;
+      const k = e.life / e.max, fade = Math.sin(Math.PI * k) * (.85 + .15 * Math.sin(time * 1.6 + e.ph * 5));
+      embData[n++] = e.x; embData[n++] = e.y;
+      embData[n++] = e.ash ? 0 : e.b * fade; embData[n++] = e.ash ? e.b * fade : 0;
     }
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.useProgram(P.emb.p);
@@ -480,7 +535,7 @@ function render() {
     gl.bindVertexArray(embVao);
     gl.bindBuffer(gl.ARRAY_BUFFER, embBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, embData, 0, n);
-    gl.drawArrays(gl.POINTS, 0, n / 3);
+    gl.drawArrays(gl.POINTS, 0, n / 4);
     gl.disable(gl.BLEND);
   }
   // palette + dither, one fragment per particle
@@ -491,8 +546,7 @@ function render() {
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, lightTex);
   gl.uniform1i(u.uLight, 0);
   gl.uniform2f(u.uGrid, gw, gh);
-  gl.uniform2f(u.uCenter, s.x, s.y);
-  gl.uniform1f(u.uTick, Math.floor(time * 12) % 9973);
+  gl.uniform1f(u.uT, time % 3600);
   gl.uniform1f(u.uBoil, S.boil);
   gl.uniform3fv(u.uCool, flat(pal.cool));
   gl.uniform3fv(u.uWarm, flat(pal.warm));
