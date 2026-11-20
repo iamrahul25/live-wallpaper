@@ -1,0 +1,289 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Icon Islands</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0a7fa6}
+canvas{display:block;width:100vw;height:100vh}
+</style></head>
+<body><canvas id="c"></canvas>
+<script>
+/*
+ * Icon Islands: every desktop icon grows its own island; icons that sit close together merge
+ * into one landmass. The host app pushes icon rectangles via window.__lwIcons(...) and serves
+ * the latest snapshot at /__icons for the first paint. Without the host (browser, thumbnail,
+ * library preview) a demo layout is used.
+ *
+ * Technique: icons are splatted into a low-res scalar field (soft sprites added together), and
+ * that field is thresholded into shallow water / foam / sand layers. Layers are rebuilt only
+ * while icons move; every frame just composites them, so idle cost stays tiny.
+ */
+(() => {
+"use strict";
+
+const cvs = document.getElementById("c");
+const ctx = cvs.getContext("2d");
+const FS = 0.4;        // field resolution relative to CSS pixels
+const TS = 78;         // field value (0-255) where sand begins
+const FPS_GAP = 30;    // ms between frames, ~30 fps
+
+let W = 0, H = 0, Q = 1, FW = 0, FH = 0;
+const mk = (willRead) => { const c = document.createElement("canvas"); return { c, x: c.getContext("2d", willRead ? { willReadFrequently: true } : undefined) }; };
+const field = mk(true), shallow = mk(), foamA = mk(), foamB = mk(), sand = mk(), decor = mk();
+let imgS, imgA, imgB, imgD, fieldData = null, noise = new Int8Array(0);
+
+/* ---------- helpers ---------- */
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const clamp = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+const ease = (g) => g * g * (3 - 2 * g);
+
+/* soft falloff sprite: alpha = (1-t)^1.6 */
+const sprite = document.createElement("canvas");
+sprite.width = sprite.height = 128;
+{
+  const g = sprite.getContext("2d");
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  for (let i = 0; i <= 12; i++) { const t = i / 12; gr.addColorStop(t, `rgba(255,255,255,${Math.pow(1 - t, 2.2).toFixed(4)})`); }
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+}
+
+/* tileable caustic web for the water surface */
+const caustic = document.createElement("canvas");
+{
+  const N = 192; caustic.width = caustic.height = N;
+  const g = caustic.getContext("2d"), im = g.createImageData(N, N), d = im.data, k = 2 * Math.PI / N;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const a = Math.sin(x * k * 3 + Math.sin(y * k * 2) * 1.8);
+    const b = Math.sin(y * k * 3 + Math.sin(x * k * 2 + 1.3) * 1.8);
+    const l = Math.pow(Math.max(0, 1 - Math.abs(a * b) * 4), 3);
+    const p = (y * N + x) * 4; d[p] = d[p + 1] = d[p + 2] = 255; d[p + 3] = l * 120;
+  }
+  g.putImageData(im, 0, 0);
+}
+const causticPat = ctx.createPattern(caustic, "repeat");
+
+/* ---------- islands ---------- */
+let blobs = [];
+let moving = false, decorAlpha = 0, decorDirty = false;
+
+function makeBlob(i, r) {
+  const rng = mulberry32(0x9e3779b9 ^ (i * 7919 + 13));
+  const lumps = [{ a: 0, d: 0, r: 0.82 }];
+  const n = 5 + ((rng() * 3) | 0);
+  for (let k = 0; k < n; k++) lumps.push({ a: (k / n) * Math.PI * 2 + rng() * 0.9, d: 0.4 + rng() * 0.55, r: 0.34 + rng() * 0.36 });
+  return { x: r.cx, y: r.cy, w: r.w, h: r.h, g: 0, tg: 1, tx: r.cx, ty: r.cy, tw: r.w, th: r.h, seed: i * 7919 + 13, lumps };
+}
+
+function setIcons(data) {
+  const sw = data.sw > 0 ? data.sw : W;
+  const k = W / sw;
+  const rects = (data.vis === false || !data.r ? [] : data.r)
+    .map(([x, y, w, h]) => ({ cx: (x + w / 2) * k, cy: (y + h / 2) * k, w: w * k, h: h * k }))
+    .filter((r) => r.cx > -150 && r.cx < W + 150 && r.cy > -150 && r.cy < H + 150);
+  rects.forEach((r, i) => {
+    const b = blobs[i];
+    if (!b) { blobs[i] = makeBlob(i, r); return; }
+    b.tx = r.cx; b.ty = r.cy; b.tw = r.w; b.th = r.h; b.tg = 1;
+  });
+  for (let i = rects.length; i < blobs.length; i++) blobs[i].tg = 0;
+  moving = true; decorAlpha = 0; decorDirty = true;
+}
+
+function demo() {
+  const r = [], iw = 76, ih = 96;
+  for (let c = 0; c < 2; c++) for (let row = 0; row < 5; row++) if (!(c === 1 && row === 4)) r.push([14 + c * 104, 12 + row * 118, iw, ih]);
+  r.push([700, 170, iw, ih], [740, 580, iw, ih], [860, 580, iw, ih], [740, 700, iw, ih], [860, 700, iw, ih], [780, 830, iw, ih]);
+  setIcons({ vis: true, sw: 1920, sh: 1080, r });
+}
+
+function update(dt) {
+  if (!moving) return;
+  let busy = false;
+  for (const b of blobs) {
+    const e = 1 - Math.pow(0.0001, dt);          // time-based easing (~1 s settle)
+    b.x += (b.tx - b.x) * e; b.y += (b.ty - b.y) * e;
+    b.w += (b.tw - b.w) * e; b.h += (b.th - b.h) * e;
+    b.g += (b.tg - b.g) * e * 0.8;
+    if (Math.abs(b.tx - b.x) + Math.abs(b.ty - b.y) > 0.4 || Math.abs(b.tg - b.g) > 0.004) busy = true;
+    else { b.x = b.tx; b.y = b.ty; b.g = b.tg; }
+  }
+  blobs = blobs.filter((b) => !(b.tg === 0 && b.g < 0.02));
+  rebuild();
+  if (!busy) { moving = false; if (decorDirty) { try { drawDecor(); } catch (e) { console.error("decor failed:", e); } decorDirty = false; } }
+}
+
+function lumpGeom(b, l) {
+  const R0 = Math.max(b.w, b.h) * 0.75 * ease(clamp(b.g));
+  return { x: b.x + Math.cos(l.a) * l.d * R0, y: b.y + Math.sin(l.a) * l.d * R0, rad: l.r * R0, R0 };
+}
+
+function rebuild() {
+  const f = field.x;
+  f.globalCompositeOperation = "source-over"; f.fillStyle = "#000"; f.fillRect(0, 0, FW, FH);
+  f.globalCompositeOperation = "lighter";
+  for (const b of blobs) {
+    if (b.g < 0.01) continue;
+    for (const l of b.lumps) {
+      const p = lumpGeom(b, l), R = p.rad * 3.3 * FS;
+      if (R < 1) continue;
+      f.drawImage(sprite, p.x * FS - R, p.y * FS - R, R * 2, R * 2);
+    }
+  }
+  const src = (fieldData = f.getImageData(0, 0, FW, FH).data);
+  const S = imgS.data, A = imgA.data, B = imgB.data, D = imgD.data;
+  for (let i = 0, p = 0, n = FW * FH; i < n; i++, p += 4) {
+    const v = src[p];
+    if (v < 6) { S[p + 3] = A[p + 3] = B[p + 3] = D[p + 3] = 0; continue; }
+
+    // shallow water: deeper turquoise outside, pale near the beach
+    const t = clamp((v - 6) / (TS - 6));
+    S[p] = 70 + 98 * t; S[p + 1] = 208 + 30 * t; S[p + 2] = 228 - 2 * t;
+    S[p + 3] = 255 * (1 - (1 - t) * (1 - t)) * 0.9;   // visible well out into the shallows
+
+    // two foam bands that "breathe" in and out of phase
+    let u = (v - (TS - 16)) / 14;
+    A[p] = A[p + 1] = A[p + 2] = 255; A[p + 3] = (u > 0 && u < 1) ? Math.sin(u * Math.PI) * 235 : 0;
+    u = (v - (TS - 38)) / 16;
+    B[p] = B[p + 1] = B[p + 2] = 255; B[p + 3] = (u > 0 && u < 1) ? Math.sin(u * Math.PI) * 200 : 0;
+
+    // sand: wet rim, dry middle, a little grain
+    const a = clamp((v - TS) / 4);
+    if (a <= 0) { D[p + 3] = 0; continue; }
+    const dry = clamp((v - TS) / 18), deep = clamp((v - TS - 18) / 120);
+    const grain = noise[i];
+    D[p]     = 214 + 26 * dry - 8 * deep + grain;
+    D[p + 1] = 193 + 32 * dry - 10 * deep + grain;
+    D[p + 2] = 146 + 36 * dry - 12 * deep + grain;
+    D[p + 3] = 255 * a;
+  }
+  shallow.x.putImageData(imgS, 0, 0); foamA.x.putImageData(imgA, 0, 0);
+  foamB.x.putImageData(imgB, 0, 0); sand.x.putImageData(imgD, 0, 0);
+}
+
+const fieldAt = (x, y) => fieldData ? fieldData[(((y * FS) | 0) * FW + ((x * FS) | 0)) * 4] : 0;
+
+/* palms, drawn only once the islands settle */
+function palm(g, x, y, s, rot, rng) {
+  g.save(); g.translate(x, y); g.rotate(rot);
+  g.fillStyle = "rgba(90,70,30,.14)"; g.beginPath(); g.ellipse(7 * s, 9 * s, 24 * s, 15 * s, 0, 0, 6.283); g.fill();
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 6.283 + (rng() - 0.5) * 0.3, L = (26 + rng() * 8) * s;
+    g.save(); g.rotate(a);
+    g.fillStyle = i % 2 ? "#2c9157" : "#3cb36a";
+    g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(L * 0.5, -8 * s, L, 2 * s); g.quadraticCurveTo(L * 0.5, 7 * s, 0, 0); g.fill();
+    g.strokeStyle = "rgba(20,80,45,.55)"; g.lineWidth = 0.8 * s; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(L * 0.5, -1 * s, L * 0.95, 1.6 * s); g.stroke();
+    g.restore();
+  }
+  g.fillStyle = "#6b4a2b"; g.beginPath(); g.arc(0, 0, 3.4 * s, 0, 6.283); g.fill();
+  g.fillStyle = "#4a3219"; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(Math.cos(i * 2.1) * 3.6 * s, Math.sin(i * 2.1) * 3.6 * s, 1.7 * s, 0, 6.283); g.fill(); }
+  g.restore();
+}
+
+function drawDecor() {
+  const g = decor.x;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, decor.c.width, decor.c.height);
+  g.setTransform(Q, 0, 0, Q, 0, 0);
+  const placed = [];
+  for (const b of blobs) {
+    if (b.tg !== 1) continue;
+    const rng = mulberry32(b.seed), sc = clamp(W / 1920, 0.45, 1.2);
+    const want = (rng() < 0.5 ? 1 : 0) + (rng() < 0.12 ? 1 : 0), R0 = Math.max(b.w, b.h) * 0.75;
+    let got = 0;
+    for (let tries = 0; tries < 40 && got < want; tries++) {
+      const a = rng() * 6.283, d = R0 * (0.6 + rng() * 0.6);
+      const px = b.x + Math.cos(a) * d, py = b.y + Math.sin(a) * d;
+      if (fieldAt(px, py) < TS + 14) continue;                          // must be on sand, not at the shore
+      if (blobs.some((o) => Math.abs(px - o.x) < o.w / 2 && Math.abs(py - o.y) < o.h / 2)) continue;   // not under an icon
+      if (placed.some((q) => Math.hypot(q.x - px, q.y - py) < 95 * sc)) continue;
+      palm(g, px, py, (0.95 + rng() * 0.3) * sc, rng() * 6.283, rng);
+      placed.push({ x: px, y: py }); got++;
+    }
+  }
+}
+
+/* ---------- birds ---------- */
+const birds = [];
+function wing(f) {
+  ctx.beginPath(); ctx.moveTo(-7, -14 - f * 3); ctx.quadraticCurveTo(0, -6, 5, 0); ctx.quadraticCurveTo(0, 6, -7, 14 + f * 3); ctx.stroke();
+}
+function drawBird(b, t) {
+  const f = Math.sin(t * 7 + b.ph), ang = Math.atan2(b.vy, b.vx);
+  ctx.lineCap = "round";
+  ctx.save(); ctx.translate(b.x + 38, b.y + 56); ctx.rotate(ang); ctx.scale(b.s, b.s);
+  ctx.strokeStyle = "rgba(0,40,70,.16)"; ctx.lineWidth = 3.4; wing(f); ctx.restore();
+  ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(ang); ctx.scale(b.s, b.s);
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.6; wing(f);
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(0, 0, 6, 2.2, 0, 0, 6.283); ctx.fill(); ctx.restore();
+}
+
+/* ---------- sizing & frame loop ---------- */
+function resize() {
+  W = innerWidth; H = innerHeight;
+  Q = Math.min(window.devicePixelRatio || 1, 1.5);
+  cvs.width = Math.round(W * Q); cvs.height = Math.round(H * Q);
+  decor.c.width = cvs.width; decor.c.height = cvs.height;
+  FW = Math.max(2, Math.ceil(W * FS)); FH = Math.max(2, Math.ceil(H * FS));
+  for (const l of [field, shallow, foamA, foamB, sand]) { l.c.width = FW; l.c.height = FH; }
+  imgS = shallow.x.createImageData(FW, FH); imgA = foamA.x.createImageData(FW, FH);
+  imgB = foamB.x.createImageData(FW, FH); imgD = sand.x.createImageData(FW, FH);
+  noise = new Int8Array(FW * FH); for (let i = 0; i < noise.length; i++) noise[i] = ((Math.random() * 12) | 0) - 5;
+  if (birds.length === 0) for (let i = 0; i < 4; i++) birds.push({ x: Math.random() * W, y: Math.random() * H, vx: 22 + Math.random() * 26, vy: -10 + Math.random() * 20, ph: Math.random() * 6, s: 0.8 + Math.random() * 0.5 });
+  rebuild();
+  if (!moving) { drawDecor(); decorAlpha = 1; }
+}
+
+function draw(t) {
+  ctx.setTransform(Q, 0, 0, Q, 0, 0);
+  const wg = ctx.createLinearGradient(W, 0, 0, H);
+  wg.addColorStop(0, "#06567d"); wg.addColorStop(0.5, "#0a8fb5"); wg.addColorStop(1, "#18b6ca");
+  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, H);
+
+  // drifting caustics, two layers moving against each other
+  ctx.globalAlpha = 0.16;
+  causticPat.setTransform(new DOMMatrix().translate(t * 9, t * 5).scale(2.6)); ctx.fillStyle = causticPat; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.10;
+  causticPat.setTransform(new DOMMatrix().translate(-t * 6, t * 8).scale(3.7)); ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(shallow.c, 0, 0, W, H);
+  ctx.globalAlpha = 0.45 + 0.45 * Math.sin(t * 0.9); ctx.drawImage(foamB.c, 0, 0, W, H);
+  ctx.globalAlpha = 0.45 + 0.45 * Math.sin(t * 0.9 + Math.PI); ctx.drawImage(foamA.c, 0, 0, W, H);
+  ctx.globalAlpha = 1; ctx.drawImage(sand.c, 0, 0, W, H);
+  if (decorAlpha > 0) { ctx.globalAlpha = decorAlpha; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(decor.c, 0, 0); ctx.setTransform(Q, 0, 0, Q, 0, 0); ctx.globalAlpha = 1; }
+
+  for (const b of birds) drawBird(b, t);
+}
+
+let last = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (document.hidden || ts - last < FPS_GAP) return;
+  const dt = Math.min(0.1, (ts - last) / 1000); last = ts;
+  update(dt);
+  if (!moving && decorAlpha < 1) decorAlpha = Math.min(1, decorAlpha + dt * 2.5);
+  for (const b of birds) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.x > W + 60) { b.x = -60; b.y = Math.random() * H; } if (b.y < -60 || b.y > H + 60) b.vy *= -1; }
+  draw(ts / 1000);
+}
+
+/* ---------- host wiring ---------- */
+window.__lwIcons = setIcons;
+addEventListener("resize", resize);
+resize();
+
+/* "?still" fast-forwards the grow-in so a screenshot (e.g. the library thumbnail) is the settled scene. */
+function settleNow() { let n = 0; while (moving && n++ < 600) update(0.033); decorAlpha = 1; }
+
+(async () => {
+  if (location.protocol === "file:") demo();
+  else {
+    try {
+      const r = await fetch("/__icons", { cache: "no-store" });
+      const d = await r.json();
+      if (d.demo || !r.ok) demo(); else setIcons(d);
+    } catch { demo(); }
+  }
+  if (location.search.includes("still")) settleNow();
+})();
+requestAnimationFrame(frame);
+})();
+</script></body></html>
