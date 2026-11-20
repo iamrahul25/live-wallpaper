@@ -550,10 +550,12 @@ vec2 micro(vec2 p, float t){
   return g*.0045;
 }
 vec3 skyEnv(vec3 R, float occ){
-  vec3 s = mix(vec3(.80, .86, .90), vec3(.42, .58, .80), ss(.55, 1., R.z));
+  // a garden pond mostly mirrors trees and shade; the sky only shows dimly through them
+  vec3 s = mix(vec3(.30, .40, .42), vec3(.18, .30, .40), ss(.55, 1., R.z));
   vec2 cp = R.xy/max(R.z, .25)*1.4 + vec2(uTime*.003, uTime*.001);
-  s = mix(s, vec3(1.02, 1., .97), ss(.42, .78, fbm(cp*2.2 + 3., 4))*.65);   // slow white clouds
-  return mix(s, vec3(.030, .055, .028), occ);          // the garden around the pond
+  s = mix(s, vec3(.50, .55, .55), ss(.50, .85, fbm(cp*2.2 + 3., 4))*.35);   // faint, slow clouds
+  s = mix(s, vec3(.05, .10, .07), .22*fbm(cp*.9 + 11., 3));                  // foliage in the reflection
+  return mix(s, vec3(.020, .045, .024), occ);          // the garden around the pond
 }
 void main(){
   vec2 uv = gl_FragCoord.xy/uRes, p = toWorld(uv);
@@ -581,7 +583,7 @@ void main(){
   vec3 vc = sq(veg.rgb)*(AMB*ambK*.95 + SUNC*cs.g*(1. - shd)*.9);
   bed = mix(bed, vc, veg.a);
   vec3 T = exp(-SIG*max(WL - bR.a, 0.)*KD);
-  vec3 col = bed*T + WATER*(.55 + .75*sunM)*(1. - T);
+  vec3 col = (bed*T + WATER*vec3(.75, 1.05, 1.15)*(.50 + .62*sunM)*(1. - T))*.95;   // deeper, clearer teal
   vec4 fs = texture(uFish, uv + vec2(offW.x/uA, -offW.y)*.45);
   col = col*(1. - fs.a) + fs.rgb;
   // surface: sky and garden reflections, sun glints
@@ -589,9 +591,9 @@ void main(){
   vec3 V = normalize(vec3(uA*.5 - p.x, .5 - p.y, CAMH));
   float F = .02 + .98*pow(1. - clamp(dot(N, V), 0., 1.), 5.);
   float occ = clamp(max(canopyCover(p)*.9, texture(uInfo, uv).r*.75), 0., 1.);
-  col = mix(col, skyEnv(reflect(-V, N), occ), clamp(F*2.4, 0., 1.));
+  col = mix(col, skyEnv(reflect(-V, N), occ), clamp(F*1.3, 0., .5));   // seen from above: weak reflection
   float ndh = max(dot(N, normalize(LSUN + V)), 0.);
-  col += SUNC*(pow(ndh, 120.)*.30 + pow(ndh, 1600.)*5.)*sunM*(1. - occ*.6);
+  col += SUNC*(pow(ndh, 160.)*.06 + pow(ndh, 1600.)*3.5)*sunM*(1. - occ*.6);   // small sharp sparkles, no milky sheen
   col += vec3(.03, .045, .04)*ss(WL - .03, WL - .004, H)*(.6 + .8*sunM);   // meniscus at the stones
   col = mix(sq(b0.rgb)*(.85 + .15*uSunI), col, wet);
   o = vec4(grade(col, p, gl_FragCoord.xy), 1.);
