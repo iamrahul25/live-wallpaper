@@ -31,6 +31,8 @@ main{max-width:1100px;margin:0 auto;padding:24px 16px 64px;display:grid;gap:20px
 .bar{position:absolute;z-index:2;top:12px;left:12px;right:12px;justify-content:space-between;display:flex;gap:8px;opacity:.85;transition:opacity .4s}
 .bar.hide{opacity:0}
 .bar button,.bar a{background:#000a;color:#fff;border:1px solid #fff4;border-radius:8px;padding:8px 12px;font:14px system-ui;cursor:pointer;text-decoration:none}
+#hint{position:absolute;z-index:2;left:50%;bottom:24px;transform:translateX(-50%);max-width:90%;background:#000b;color:#fff;border-radius:999px;padding:10px 18px;font-size:14px;text-align:center;transition:opacity .6s;pointer-events:none}
+#hint.hide{opacity:0}
 footer{text-align:center;color:var(--muted);padding:0 16px 40px;font-size:14px}
 footer a{color:var(--accent)}
 </style>
@@ -44,11 +46,13 @@ footer a{color:var(--accent)}
 <main id="grid"></main>
 <footer>Best on desktop Chrome/Edge. Some wallpapers are heavy — tell me if one lags. · <a id="fbFoot" target="_blank" rel="noopener">Leave feedback</a></footer>
 <div id="viewer">
+  <div id="hint" class="hide"></div>
   <iframe id="frame" allow="fullscreen" title="Wallpaper"></iframe>
   <div class="bar" id="bar">
     <button id="close">← Back</button>
     <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
       <a id="fbView" target="_blank" rel="noopener">Feedback</a>
+      <button id="feed" style="display:none">🍞 Feed koi</button>
       <button id="rot">⟳ Rotate</button>
       <button id="fs">⛶ Fullscreen</button>
     </span>
@@ -57,7 +61,7 @@ footer a{color:var(--accent)}
 <script>
 const REPO="iamrahul25/live-wallpaper";
 const list=[
- {id:"koi-pond",thumb:"thumb.jpg"},
+ {id:"koi-pond",thumb:"thumb.jpg",hint:"Tap or click the water to sprinkle food — the koi swim over to eat it 🐟",feed:true},
  {id:"hollow-king",thumb:"thumb.jpg"},
  {id:"neon-rain",thumb:"thumb.jpg"},
  {id:"icon-islands",thumb:"thumb.png"},
@@ -75,6 +79,9 @@ function open(w){
   viewer.classList.add("open");document.body.style.overflow="hidden";
   history.replaceState(null,"","#"+w.id);
   setRot(false);
+  $("feed").style.display=w.feed?"":"none";
+  const h=$("hint");clearTimeout(h._t);
+  if(w.hint){h.textContent=w.hint;h.classList.remove("hide");h._t=setTimeout(()=>h.classList.add("hide"),6000)}else h.classList.add("hide");
   wake();
 }
 function close(){
@@ -87,6 +94,7 @@ function fit(){
   frame.style.width=(r?H:W)+"px";frame.style.height=(r?W:H)+"px";
 }
 function setRot(on){viewer.classList.toggle("rot",on);fit()}
+$("feed").onclick=()=>{const fw=frame.contentWindow;if(!fw?.__lwClick)return;for(let i=0;i<12;i++){const n=fw.__lwFeedStats?fw.__lwFeedStats().food:0;fw.__lwClick(.15+Math.random()*.7,.15+Math.random()*.7);if(!fw.__lwFeedStats||fw.__lwFeedStats().food>n)break}};
 $("rot").onclick=()=>setRot(!viewer.classList.contains("rot"));
 addEventListener("resize",fit);
 function wake(){bar.classList.remove("hide");clearTimeout(timer);timer=setTimeout(()=>bar.classList.add("hide"),2500)}
