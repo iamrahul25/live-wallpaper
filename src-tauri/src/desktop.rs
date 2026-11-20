@@ -7,8 +7,9 @@
 //!   `Progman`. We parent into `Progman` and slot the window just below the icons.
 
 use std::ffi::c_void;
+use std::sync::atomic::{AtomicIsize, Ordering};
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{BOOL, COLORREF, HWND, LPARAM, WPARAM};
+use windows::Win32::Foundation::{BOOL, COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 unsafe extern "system" fn find_worker(top: HWND, lparam: LPARAM) -> BOOL {
@@ -18,6 +19,21 @@ unsafe extern "system" fn find_worker(top: HWND, lparam: LPARAM) -> BOOL {
         }
     }
     BOOL(1)
+}
+
+/// The host window's original window procedure (tao's), which `full_client_proc` forwards to.
+static ORIG_PROC: AtomicIsize = AtomicIsize::new(0);
+
+/// tao answers WM_NCCALCSIZE for undecorated windows by keeping an invisible resize border
+/// (about 9 px left/right/bottom and 1 px top at 125 % scaling). On the desktop that border is
+/// never painted, so it showed as thin strips down both screen edges. Here the whole window is
+/// client area.
+unsafe extern "system" fn full_client_proc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if msg == WM_NCCALCSIZE {
+        return LRESULT(0); // leaves the proposed window rect as the client rect
+    }
+    let orig: WNDPROC = std::mem::transmute(ORIG_PROC.load(Ordering::Relaxed));
+    CallWindowProcW(orig, hwnd, msg, wp, lp)
 }
 
 /// Primary-monitor rectangle relative to the virtual-screen origin (where Progman/WorkerW start).
@@ -40,7 +56,21 @@ pub fn attach(raw_hwnd: *mut c_void) -> Result<(), String> {
         SendMessageTimeoutW(progman, 0x052C, WPARAM(0), LPARAM(0), SMTO_NORMAL, 1000, None);
 
         let (x, y, cx, cy) = primary_rect();
-        let flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
+        // Make the whole window client area (see `full_client_proc`). Only subclass once per window.
+        let ours = full_client_proc as unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT as usize as isize;
+        let cur = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
+        if cur != ours {
+            ORIG_PROC.store(cur, Ordering::Relaxed);
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, ours);
+        }
+        // Drop frame/border styles too, so nothing else reserves a non-client area.
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        let frame = (WS_CAPTION | WS_THICKFRAME | WS_BORDER | WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX).0 as isize;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style & !frame);
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let ex_frame = (WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE | WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE).0 as isize;
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex & !ex_frame);
+        let flags = SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED;
 
         let defview = FindWindowExW(progman, HWND::default(), w!("SHELLDLL_DefView"), PCWSTR::null());
         let child_worker = FindWindowExW(progman, HWND::default(), w!("WorkerW"), PCWSTR::null());
