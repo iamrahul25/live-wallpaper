@@ -24,6 +24,9 @@ struct Meta {
     /// Wallpaper wants desktop icon positions (`window.__lwIcons` / `GET /__icons`).
     #[serde(rename = "usesIcons", default, skip_serializing_if = "Option::is_none")]
     uses_icons: Option<bool>,
+    /// Wallpaper wants desktop clicks (`window.__lwClick(x, y)`, both 0..1 of the primary monitor).
+    #[serde(rename = "usesClicks", default, skip_serializing_if = "Option::is_none")]
+    uses_clicks: Option<bool>,
 }
 
 const PALETTE: [&str; 6] = ["#6aa8ff", "#8b7bff", "#ff6b9a", "#ffb84d", "#3ddc97", "#4cc9f0"];
@@ -110,6 +113,16 @@ pub fn uses_icons(app: &AppHandle, id: &str) -> bool {
         .and_then(|d| fs::read_to_string(d.join("wallpaper.json")).ok())
         .and_then(|s| serde_json::from_str::<Meta>(&s).ok())
         .and_then(|m| m.uses_icons)
+        .unwrap_or(false)
+}
+
+/// True when the wallpaper's `wallpaper.json` sets `"usesClicks": true`.
+pub fn uses_clicks(app: &AppHandle, id: &str) -> bool {
+    resolve(app, id)
+        .ok()
+        .and_then(|d| fs::read_to_string(d.join("wallpaper.json")).ok())
+        .and_then(|s| serde_json::from_str::<Meta>(&s).ok())
+        .and_then(|m| m.uses_clicks)
         .unwrap_or(false)
 }
 

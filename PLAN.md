@@ -64,7 +64,7 @@ my-wallpaper/
 - Pause the wallpaper when a fullscreen app or game is running, or on battery (detect the foreground window, then call `TrySuspend` or a JS `visibilitychange`)
 - FPS cap and a "pause when the desktop is covered" option
 - Multi-monitor: pick the monitor, span or duplicate
-- Mouse input passthrough to the wallpaper (low-level mouse hook, then forward to WebView2)
+- Mouse input passthrough to the wallpaper: **left clicks done** (opt-in `"usesClicks": true` in `wallpaper.json`; `input.rs` installs a low-level mouse hook only while such a wallpaper runs and calls `window.__lwClick(x, y)`; Koi Pond uses it to sprinkle fish food). Still to do: mouse move, other buttons, multi-monitor
 - Start with Windows (MSIX `StartupTask`)
 - Single instance (`tauri-plugin-single-instance`)
 

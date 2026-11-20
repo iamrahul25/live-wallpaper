@@ -20,7 +20,8 @@ canvas{display:block;width:100vw;height:100vh}
  *   overlay lily pads, lotus (+ shadows and reflections), fallen petals, pollen and duckweed
  *
  * Options: ?q=low|medium|high|ultra  ?fps=60  ?fish=8  ?t=seconds  ?still (render one settled frame)
- * Host:    window.__lwSettings({ quality, fps, fish, lotus, calm, paused }), window.__lwIcons(snapshot)
+ * Host:    window.__lwSettings({ quality, fps, fish, lotus, calm, paused }), window.__lwIcons(snapshot),
+ *          window.__lwClick(x, y)  a click on the water (0..1 of the screen): sprinkles food, the koi swim over to eat it
  * Lively:  livelyPropertyListener(name, value), livelyWallpaperPlaybackChanged(json)
  */
 (() => {
@@ -808,14 +809,25 @@ void main(){
 
 /* ---------- small things: pollen, duckweed, motes, bubbles ---------- */
 const VS_PTS = `
-in vec4 aP;
-uniform int uMode;          // 0 floating specks, 1 underwater motes, 2 bubbles
+in vec4 aP; in vec4 aQ;     // food only. P: x, y, size, fade   Q: seed, soak (0 dry .. 1 sodden)
+uniform int uMode;          // 0 floating specks, 1 underwater motes, 2 bubbles, 3 fish food
 uniform float uPx;
 uniform sampler2D uSurf;
-out vec4 vD; out vec2 vW;
+out vec4 vD; out vec4 vE; out vec2 vW;
 void main(){
   vec2 c; float size;
+  vE = vec4(0.);
   if (uMode == 2){ c = aP.xy; size = aP.z; vD = vec4(aP.w, 0., 0., 0.); }
+  else if (uMode == 3){
+    // a pellet rides the water: it slides, tilts and bobs with the surface, so ripples and wakes shake it
+    vec4 sf = DEC_S(texture(uSurf, toUV(aP.xy)));
+    c = aP.xy - sf.xy*.010;
+    size = aP.z*(1. + clamp(sf.z*.03, -.08, .08));
+    float h = hash12(vec2(aQ.x*91.7, 3.1)), h2 = hash12(vec2(aQ.x*43.3, 9.4));
+    float rot = h*6.2832 + clamp((sf.x - sf.y)*.8, -.5, .5) + .05*sin(uTime*.9 + aQ.x*30.);
+    vD = vec4(aP.w, aQ.x, clamp(sf.w, 0., 1.2), aQ.y);
+    vE = vec4(sf.xy, rot, 1. + .4*h2);                   // surface slope, rotation, how oval it is
+  }
   else {
     float s = aP.z, t = uTime;
     float amp = uMode == 1 ? .05 : .025;
@@ -832,7 +844,7 @@ void main(){
 }
 `;
 const FS_PTS = `
-in vec4 vD; in vec2 vW;
+in vec4 vD; in vec4 vE; in vec2 vW;
 uniform int uMode;
 out vec4 o;
 void main(){
@@ -846,6 +858,61 @@ void main(){
     vec3 c = vec3(.75, .9, .9)*(.6 + .6*hl)*Tf + WATER*(1. - Tf);
     a *= .35 + .65*(1. - vD.x);
     o = vec4(c*a, a);
+    return;
+  }
+  if (uMode == 3){
+    // A floating koi pellet: a matte, slightly lumpy brown cylinder sitting in the surface film.
+    float fade = vD.x, seed = vD.y, sun = vD.z, soak = vD.w;
+    vec2 slope = vE.xy;
+    float rot = vE.z, asp = vE.w;
+    float cr = cos(rot), sr = sin(rot);
+    vec2 q = vec2(cr*pc.x + sr*pc.y, -sr*pc.x + cr*pc.y);          // pellet frame, long axis along x
+    const float R0 = .36;
+    float ang = atan(q.y, q.x);
+    float rr = R0*(1. + .07*sin(ang*3. + seed*40.) + .045*sin(ang*5. + seed*71.)
+                      + .05*(vnoise(vec2(ang*2. + seed*13., seed*9.)) - .5));   // uneven outline
+    vec2 qs = q/vec2(sqrt(asp), 1./sqrt(asp));                      // oval
+    float len = length(qs);
+    float aa = fwidth(len)*1.1 + .004 + .012*soak;                 // a soggy pellet has a softer edge
+    float cov = ss(rr + aa, rr - aa, len);
+
+    // colour: dark brown to reddish tan, a few duller orange; grainy and pitted
+    float tone = hash12(vec2(seed*57.3, 1.7));
+    vec3 alb = tone < .5 ? mix(vec3(.21, .135, .085), vec3(.40, .26, .155), tone*2.)
+                         : mix(vec3(.40, .26, .155), vec3(.58, .38, .24), (tone - .5)*2.);
+    alb = mix(alb, vec3(.52, .28, .13), .22*hash12(vec2(seed*13.7, 4.4)));
+    alb *= .70 + .38*vnoise(pc*17. + seed*50.) + .22*vnoise(pc*41. + seed*23.);
+    alb *= 1. - .30*ss(.74, .84, vnoise(pc*30. + seed*70.));
+    alb = mix(alb, alb*vec3(.62, .58, .55), soak*.7);              // water soaks in: darker, duller
+
+    // shape: flat top, rounded rim; tilted a little by the waves. Matte, so no hotspot.
+    vec2 nl = qs/rr;
+    float dn = clamp(length(nl), 0., 1.);
+    vec2 tl = nl*(.18 + .75*ss(.45, 1., dn));
+    vec2 nw = vec2(cr*tl.x - sr*tl.y, sr*tl.x + cr*tl.y);
+    vec3 N = normalize(vec3(nw - slope*2.2, .9));
+    float ndl = max(dot(N, LSUN), 0.);
+    vec3 pcol = lin(alb)*(AMB*1.7 + SUNC*1.5*sun*ndl);
+    pcol += SUNC*pow(max(dot(N, normalize(LSUN + vec3(0., 0., 1.))), 0.), 10.)*.05*sun*(1. - soak*.6);
+    pcol *= 1. - .30*ss(.65, 1., dn);                               // the rim sinks into the film
+    pcol = mix(pcol, WATER*3., .14 + .10*soak);                     // partly submerged: a touch of water colour
+
+    // water contact: soft dark meniscus, a faint sky glint on the sunny side, a faint shadow
+    float e = (len - rr)/rr;
+    float outside = 1. - cov;
+    float rA = outside*(ss(.75, .04, e)*.26 + ss(.0, .05, e)*ss(.22, .07, e)*.22);
+    vec2 od = pc/max(length(pc), 1e-3);
+    float glint = outside*ss(.02, .08, e)*ss(.30, .12, e)*pow(max(dot(od, normalize(LSUN.xy)), 0.), 2.)*sun;
+    vec3 rCol = mix(vec3(.008, .028, .026), vec3(.55, .72, .80), clamp(glint*1.6, 0., 1.));
+    rA = min(rA + glint*.28, .7);
+    float shA = outside*ss(rr*1.5, rr*.3, length(pc + LSUN.xy*.10))*.20;
+
+    vec3 acc = vec3(.006, .02, .018)*shA; float A = shA;
+    acc = acc*(1. - rA) + rCol*rA; A = A*(1. - rA) + rA;
+    acc = acc*(1. - cov) + pcol*cov; A = A*(1. - cov) + cov;
+    vec3 col = acc/max(A, 1e-3);
+    A *= fade;
+    o = vec4(grade(col, vW, gl_FragCoord.xy)*A, A);
     return;
   }
   float a = ss(1., .2, r);
@@ -1067,6 +1134,7 @@ function makeFish(i) {
     phase: rnd() * 6, freq: 1, amp: .05, finL: 1, finR: 1, finPh: rnd() * 6, pel: .6, flut: 0,
     mode: "cruise", modeT: 3 + rnd() * 8, cruise: .4 + .25 * rnd(), wf: .05 + .07 * rnd(), wt: .35 + .35 * rnd(),
     sipT: 12 + rnd() * 50, sipping: false, sipDone: false, sipHold: 0, leader: null,
+    hungry: false, react: 0, fed: 0, appetite: 4, chew: 0, tgt: null,
     trX: new Float32Array(TR), trY: new Float32Array(TR), trHead: 0, trN: 0,
     sx: new Float32Array(NS), sy: new Float32Array(NS), cx: 0, cy: 0,
   };
@@ -1107,13 +1175,110 @@ function pickMode(f) {
 }
 const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
+/* ---------- feeding: click the water to sprinkle food, the koi swim over and eat it ---------- */
+const FOOD_MAX = 40;        // pellets alive at once (oldest go first), so click spam stays cheap
+const FEED_TIME = 18;       // seconds of interest after the latest click
+const FOOD_REACT = 1.1;     // koi within this distance (world units) notice a click
+let food = [], feedT = 0;
+let fdx = 0, fdy = 0, fd = 0;   // vector to the pellet a chasing koi is heading for
+
+// pellets and the koi chasing them must stay clear of everything danger() steers away from
+function safeSpot(x, y) {
+  if (danger(x, y) > 0) return false;
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + .6; if (danger(x + Math.cos(a) * .05, y + Math.sin(a) * .05) > 0) return false; }
+  return true;
+}
+// x, y: click position as a fraction of the screen
+function feedAt(fx, fy) {
+  if (!(fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) || !fish.length) return;
+  const x = fx * A, y = fy;
+  if (!safeSpot(x, y)) return;                         // stone, shore or desktop icons: not water the koi can reach
+  const fresh = food.length === 0;
+  const n = 6 + (rnd() * 7 | 0);
+  const add = [];
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.2832, r = .004 + .042 * Math.pow(rnd(), .8);
+    const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+    if (!safeSpot(px, py)) continue;
+    add.push({ x: px, y: py, vx: (rnd() - .5) * .006, vy: (rnd() - .5) * .006, s: .7 + .7 * rnd(),
+               t: -rnd() * .5, age: 0, life: 16 + rnd() * 4, gone: false, ph: rnd() * 6 });   // t < 0: still falling
+  }
+  if (!add.length) return;
+  while (food.length + add.length > FOOD_MAX && food.length) food.shift().gone = true;
+  for (const p of add.slice(0, FOOD_MAX)) food.push(p);
+  feedT = FEED_TIME;
+  events.push({ x, y, r: .016, w: -.05, n: 3 });       // the splash of the whole handful
+  for (const f of fish) {
+    if (fresh) { f.fed = 0; f.appetite = 3 + (rnd() * 4 | 0); }
+    const d = Math.hypot(f.x - x, f.y - y);
+    if (d < FOOD_REACT && f.fed < f.appetite && !f.hungry) f.react = .2 + d * .9 + rnd() * .5;
+  }
+}
+function endFeed(f) {
+  f.hungry = false; f.react = 0; f.tgt = null; f.chew = 0;
+  f.depthT = .2 + .25 * rnd();
+  f.sipT = Math.max(f.sipT, 15 + rnd() * 25);
+}
+function stepFood(dt) {
+  if (feedT > 0) feedT -= dt;
+  if (!food.length) return;
+  for (const p of food) {
+    p.age += dt;
+    if (p.t < 0) {
+      p.t += dt;
+      if (p.t >= 0) events.push({ x: p.x, y: p.y, r: .0055, w: -.03, n: 2 });   // lands: a small ripple
+      continue;
+    }
+    p.t += dt;
+    const nx = p.x + (p.vx + .003 * Math.sin(time * .7 + p.ph)) * dt, ny = p.y + (p.vy + .003 * Math.cos(time * .6 + p.ph)) * dt;
+    if (danger(nx, ny) === 0) { p.x = nx; p.y = ny; } else { p.vx *= -.5; p.vy *= -.5; }
+    if (p.age > p.life) p.gone = true;
+  }
+  food = food.filter((p) => !p.gone);
+}
+// true while this koi is heading for food; the direction and distance end up in fdx, fdy, fd
+function feedUpdate(f, dt) {
+  if (feedT <= 0 || !food.length || f.fed >= f.appetite) { if (f.hungry) endFeed(f); f.react = 0; return false; }
+  if (f.chew > 0) f.chew -= dt;
+  if (f.react > 0 && (f.react -= dt) <= 0) f.hungry = true;
+  const L = f.L, ch = Math.cos(f.h), sh = Math.sin(f.h);
+  const mx = f.x + ch * L * .04, my = f.y + sh * L * .04;     // the mouth
+  if (!f.hungry) {                                             // koi swimming close to food notice it anyway
+    for (const p of food) if (p.t >= 0 && Math.hypot(p.x - mx, p.y - my) < .4) { f.hungry = true; break; }
+    if (!f.hungry) return false;
+  }
+  if (f.hungry && f.sipping) { f.sipping = false; f.sipDone = false; }
+  // nearest landed pellet, sticking with the current one unless another is clearly closer
+  let best = null, bd = 1e9;
+  for (const p of food) {
+    if (p.t < 0 || p.gone) continue;
+    const d = Math.hypot(p.x - mx, p.y - my);
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (f.tgt && !f.tgt.gone && f.tgt.t >= 0 && best !== f.tgt) {
+    const dt0 = Math.hypot(f.tgt.x - mx, f.tgt.y - my);
+    if (dt0 < bd * 1.6) { best = f.tgt; bd = dt0; }
+  }
+  if (!best) return false;
+  f.tgt = best;
+  if (bd < L * .2 + .008 && f.z01 < .18 && f.chew <= 0) {      // reached it: eat
+    best.gone = true; f.tgt = null; f.fed++; f.chew = .4;
+    events.push({ x: best.x, y: best.y, r: .007 + L * .02, w: -.045, n: 3 });
+    if (rnd() < .45) spawnBubbles(best.x, best.y, 1, .05);
+    return false;
+  }
+  fdx = best.x - mx; fdy = best.y - my; fd = bd;
+  return true;
+}
+
 function updateFish(f, dt) {
   f.modeT -= dt;
   if (f.modeT <= 0) pickMode(f);
   const L = f.L;
+  const chasing = feedUpdate(f, dt);
   // rise to sip at the surface now and then
   f.sipT -= dt;
-  if (f.sipT <= 0 && !f.sipping && iconDanger(f.x, f.y) === 0) { f.sipping = true; f.sipDone = false; f.depthT = 0; }
+  if (f.sipT <= 0 && !f.sipping && !f.hungry && iconDanger(f.x, f.y) === 0) { f.sipping = true; f.sipDone = false; f.depthT = 0; }
   if (f.sipping) {
     if (!f.sipDone && f.z01 < .045) {
       f.sipDone = true; f.sipHold = 1.2 + rnd();
@@ -1124,9 +1289,10 @@ function updateFish(f, dt) {
     if (f.sipDone && (f.sipHold -= dt) <= 0) { f.sipping = false; f.depthT = .2 + .25 * rnd(); f.sipT = 30 + rnd() * 60; }
   }
   // depth: glide up and down smoothly; slip deeper when passing behind desktop icons
-  let depthT = f.depthT;
+  let depthT = chasing ? 0 : f.depthT;
   if (iconDanger(f.x, f.y) > .3 && !f.sipping) depthT = Math.max(depthT, .8);
-  f.vz += (clamp((depthT - f.z01) * .6, -.12, .12) - f.vz) * Math.min(1, dt * 1.5);
+  const vzMax = chasing ? .35 : .12;                  // hungry koi come up fast
+  f.vz += (clamp((depthT - f.z01) * .6, -vzMax, vzMax) - f.vz) * Math.min(1, dt * 1.5);
   f.z01 = clamp(f.z01 + f.vz * dt, 0, 1);
   f.z = f.z01 * Math.min(ZMAX, floorDepth(f.x, f.y) * .85);
 
@@ -1134,6 +1300,7 @@ function updateFish(f, dt) {
   const ch = Math.cos(f.h), sh = Math.sin(f.h);
   const t = time;
   let turn = (noise1(f.seed * 7.1 + t * f.wf) + .35 * noise1(f.seed * 3.3 + t * f.wf * 2.7)) * f.wt;
+  if (chasing) turn *= .2;                            // less dawdling when there is food
   const look = L * .9 + f.speed * 1.1;
   const dC = danger(f.x + ch * look, f.y + sh * look);
   if (dC > .001) {
@@ -1153,8 +1320,14 @@ function updateFish(f, dt) {
     const dx = g.x - f.x, dy = g.y - f.y, dist = Math.hypot(dx, dy), R = (f.L + g.L) * .45;
     if (dist < R && dist > 1e-5) turn -= Math.sign(ch * dy - sh * dx) * (1 - dist / R) * 1.6;
   }
-  let target;
-  if (f.mode === "follow" && f.leader) {
+  let target, da = 0;
+  if (chasing) {
+    // swing toward the pellet (the usual turn-rate limit keeps it smooth) and ease off as it gets close
+    da = angDiff(Math.atan2(fdy, fdx), f.h);
+    turn += clamp(da, -1.4, 1.4) * 1.8;
+    target = L * clamp(fd / (1.3 * L), .16, .95) * (.35 + .65 * Math.max(0, Math.cos(da)));
+    if (f.chew > 0) target = Math.min(target, .12 * L);
+  } else if (f.mode === "follow" && f.leader) {
     const g = f.leader, bx = g.x - Math.cos(g.h) * g.L * 1.3, by = g.y - Math.sin(g.h) * g.L * 1.3;
     turn += clamp(angDiff(Math.atan2(by - f.y, bx - f.x), f.h), -1, 1) * .9;
     target = clamp(g.speed / L * (Math.hypot(bx - f.x, by - f.y) > L ? 1.15 : .95), .2, .9) * L;
@@ -1166,7 +1339,7 @@ function updateFish(f, dt) {
   f.h += f.tv * dt;
 
   // ---- speed and stroke
-  const gliding = f.mode === "glide";
+  const gliding = !chasing && f.mode === "glide";
   target *= 1 - .25 * Math.min(1, Math.abs(f.tv) / maxTurn);
   if (gliding) f.speed += (.07 * L - f.speed) * .35 * dt;
   else { const err = target - f.speed; f.speed += err * (err > 0 ? 1.1 : .45) * dt; }
@@ -1248,6 +1421,7 @@ function spawnBubbles(x, y, n, z0) {
     bubbles.push({ x: x + (rnd() - .5) * .01, y: y + (rnd() - .5) * .01, z: z0 + i * .12, vz: .12 + .06 * rnd(), ph: rnd() * 6, s: .7 + .5 * rnd() });
 }
 const BUB = new Float32Array(40 * 4);
+const FOODB = new Float32Array(FOOD_MAX * 8);   // per pellet: x, y, size, fade | seed, soak, 0, 0
 let dropT = 3, bubbleT = 5;
 
 /* ======================================================================================
@@ -1259,6 +1433,7 @@ function simRate() { return 60 * simH / 340; }
 function step(dt) {
   time += dt;
   sunI = .95 + .03 * Math.sin(time * .031 + 1) + .025 * Math.sin(time * .017 + 4);
+  stepFood(dt);
   for (const f of fish) updateFish(f, dt);
   // ambient life: a drip or an insect touching the water, a few bubbles from the floor
   if ((dropT -= dt) <= 0) {
@@ -1414,6 +1589,23 @@ function render() {
   p = P.pad; use(p, W, H);
   tex(p, "uSurf", 0, T.surf); tex(p, "uBed", 1, T.bedA); I1(p, "uMode", 0);
   gl.bindVertexArray(B.padVAO); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, pads.length);
+  // fish food (always on top of the pads: it is what the koi are swimming to)
+  let nf = 0;
+  for (const q of food) {
+    if (q.t < 0) continue;
+    const a = clamp((q.life - q.age) / 4, 0, 1) * clamp(q.t / .12, 0, 1);
+    const pop = q.t < .3 ? 1 + .45 * Math.pow(1 - q.t / .3, 2) : 1;
+    const o = nf * 8;
+    FOODB[o] = q.x; FOODB[o + 1] = q.y; FOODB[o + 2] = 15 * q.s * pop * px; FOODB[o + 3] = a;
+    FOODB[o + 4] = q.ph / 6; FOODB[o + 5] = clamp(q.t / 5, 0, 1);       // seed (look of this pellet), how soaked it is
+    nf++;
+  }
+  if (nf) {
+    p = P.pts; use(p, W, H);
+    tex(p, "uSurf", 0, T.surf); I1(p, "uMode", 3); F1(p, "uPx", 1);
+    gl.bindBuffer(gl.ARRAY_BUFFER, B.food); gl.bufferSubData(gl.ARRAY_BUFFER, 0, FOODB, 0, nf * 8);
+    gl.bindVertexArray(B.foodVAO); gl.drawArrays(gl.POINTS, 0, nf);
+  }
   p = P.lotus; use(p, W, H);
   tex(p, "uSurf", 0, T.surf); tex(p, "uBed", 1, T.bedA);
   I1(p, "uMode", 3);
@@ -1450,15 +1642,18 @@ function init() {
   P.fish = program(VS_FISH, FS_FISH, ["aPos", "aUV", "aLat"]);
   P.pad = program(VS_PAD, FS_PAD, ["aCorner", "aP", "aQ"]);
   P.lotus = program(VS_LOTUS, FS_LOTUS, ["aCorner", "aP", "aQ"]);
-  P.pts = program(VS_PTS, FS_PTS, ["aP"]);
+  P.pts = program(VS_PTS, FS_PTS, ["aP", "aQ"]);
   const mk = () => gl.createBuffer();
-  B = { quad: mk(), fish: mk(), padInst: mk(), lotusInst: mk(), petalInst: mk(), specks: mk(), motes: mk(), bubbles: mk() };
+  B = { quad: mk(), fish: mk(), padInst: mk(), lotusInst: mk(), petalInst: mk(), specks: mk(), motes: mk(), bubbles: mk(), food: mk() };
   gl.bindBuffer(gl.ARRAY_BUFFER, B.quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, B.fish);
   gl.bufferData(gl.ARRAY_BUFFER, fishData.byteLength, gl.DYNAMIC_DRAW);
   gl.bindBuffer(gl.ARRAY_BUFFER, B.bubbles);
   gl.bufferData(gl.ARRAY_BUFFER, BUB.byteLength, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, B.food);
+  gl.bufferData(gl.ARRAY_BUFFER, FOODB.byteLength, gl.DYNAMIC_DRAW);
+  B.foodVAO = vao(() => { attr(B.food, 0, 4, 32, 0); attr(B.food, 1, 4, 32, 16); });
   B.fishVAO = vao(() => { attr(B.fish, 0, 2, 24, 0); attr(B.fish, 1, 2, 24, 8); attr(B.fish, 2, 2, 24, 16); });
   const inst = (buf) => vao(() => { attr(B.quad, 0, 2, 8, 0); attr(buf, 1, 4, 32, 0, 1); attr(buf, 2, 4, 32, 16, 1); });
   B.padVAO = inst(B.padInst); B.lotusVAO = inst(B.lotusInst); B.petalVAO = inst(B.petalInst);
@@ -1583,6 +1778,12 @@ addEventListener("resize", () => { if (resizeQueued) return; resizeQueued = true
 if (navigator.getBattery) navigator.getBattery().then((b) => { const u = () => { onBattery = !b.charging; }; b.addEventListener("chargingchange", u); u(); }).catch(() => {});
 
 window.__lwIcons = setIcons;
+window.__lwClick = feedAt;   // the host forwards clicks on the bare desktop (x, y: 0..1 of the screen)
+// clicks that reach the page directly (library preview, a plain browser)
+canvas.addEventListener("pointerdown", (e) => { if (e.button === 0) feedAt(e.clientX / innerWidth, e.clientY / innerHeight); });
+if (params.has("debug")) window.__lwStep = (n, dt) => { for (let i = 0; i < n; i++) step(dt || 1 / 30); render(); };   // manual stepping for tests
+window.__lwFeedStats = () => ({ food: food.length, landed: food.filter((p) => p.t >= 0).length, feedT: +feedT.toFixed(1),
+  hungry: fish.filter((f) => f.hungry).length, chasing: fish.filter((f) => f.tgt).length, fed: fish.map((f) => f.fed) });
 window.__lwSettings = (o) => {
   if (!o) return;
   if (o.fps) S.fps = clamp(+o.fps, 10, 240);

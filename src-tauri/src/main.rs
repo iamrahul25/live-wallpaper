@@ -5,6 +5,8 @@
 mod desktop;
 #[cfg(windows)]
 mod icons;
+#[cfg(windows)]
+mod input;
 mod library;
 
 use serde::{Deserialize, Serialize};
@@ -107,6 +109,8 @@ fn show_wallpaper(app: &AppHandle, id: &str) -> Result<(), String> {
         }
         st.icons_on.store(wants_icons, Ordering::Relaxed);
     }
+    #[cfg(windows)]
+    input::set_enabled(library::uses_clicks(app, id));
     let url =library::url_for(id).parse::<tauri::Url>().map_err(|e| e.to_string())?;
 
     if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
@@ -136,6 +140,8 @@ fn show_wallpaper(app: &AppHandle, id: &str) -> Result<(), String> {
 
 fn stop(app: &AppHandle) {
     app.state::<AppState>().icons_on.store(false, Ordering::Relaxed);
+    #[cfg(windows)]
+    input::set_enabled(false);
     if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
         let _ = win.destroy();
         #[cfg(windows)]
@@ -247,6 +253,8 @@ fn main() {
                 .build(app)?;
 
             start_icon_poller(app.handle().clone());
+            #[cfg(windows)]
+            input::init(app.handle().clone());
 
             // Restore the last wallpaper.
             if let Some(id) = load_settings(app.handle()).active {

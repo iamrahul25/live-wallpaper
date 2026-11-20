@@ -2,5 +2,6 @@
   "title": "Koi Pond",
   "description": "Koi gliding through a sunlit lotus pond, with live caustics and ripples",
   "accent": ["#1f8f86", "#f08a3c"],
-  "usesIcons": true
+  "usesIcons": true,
+  "usesClicks": true
 }
