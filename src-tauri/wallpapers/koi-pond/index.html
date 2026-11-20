@@ -1215,7 +1215,7 @@ function makeFish(i) {
     phase: rnd() * 6, freq: 1, amp: .05, finL: 1, finR: 1, finPh: rnd() * 6, pel: .6, flut: 0,
     mode: "cruise", modeT: 3 + rnd() * 8, cruise: .4 + .25 * rnd(), wf: .05 + .07 * rnd(), wt: .35 + .35 * rnd(),
     sipT: 12 + rnd() * 50, sipping: false, sipDone: false, sipHold: 0, leader: null,
-    hungry: false, react: 0, fed: 0, appetite: 4, chew: 0, tgt: null,
+    hungry: false, react: 0, fed: 0, chew: 0, tgt: null,
     trX: new Float32Array(TR), trY: new Float32Array(TR), trHead: 0, trN: 0,
     sx: new Float32Array(NS), sy: new Float32Array(NS), cx: 0, cy: 0,
   };
@@ -1259,7 +1259,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI;
 /* ---------- feeding: click the water to sprinkle food, the koi swim over and eat it ---------- */
 const FOOD_MAX = 40;        // pellets alive at once (oldest go first), so click spam stays cheap
 const FEED_TIME = 18;       // seconds of interest after the latest click
-const FOOD_REACT = 1.1;     // koi within this distance (world units) notice a click
+const FOOD_REACT = 1.1;     // distance (world units) beyond which a koi's reaction delay stops growing
 let food = [], feedT = 0;
 let fdx = 0, fdy = 0, fd = 0;   // vector to the pellet a chasing koi is heading for
 
@@ -1290,9 +1290,10 @@ function feedAt(fx, fy) {
   feedT = FEED_TIME;
   events.push({ x, y, r: .016, w: -.05, n: 3 });       // the splash of the whole handful
   for (const f of fish) {
-    if (fresh) { f.fed = 0; f.appetite = 3 + (rnd() * 4 | 0); }
+    if (fresh) f.fed = 0;
     const d = Math.hypot(f.x - x, f.y - y);
-    if (d < FOOD_REACT && f.fed < f.appetite && !f.hungry) f.react = .2 + d * .9 + rnd() * .5;
+    // every koi comes for food; the farther away, the later it notices (at most ~2 s)
+    if (!f.hungry && f.react <= 0) f.react = .2 + Math.min(d, FOOD_REACT) * 1.1 + rnd() * .5;
   }
 }
 function endFeed(f) {
@@ -1319,7 +1320,8 @@ function stepFood(dt) {
 }
 // true while this koi is heading for food; the direction and distance end up in fdx, fdy, fd
 function feedUpdate(f, dt) {
-  if (feedT <= 0 || !food.length || f.fed >= f.appetite) { if (f.hungry) endFeed(f); f.react = 0; return false; }
+  // no appetite limit: koi keep eating while there is food
+  if (feedT <= 0 || !food.length) { if (f.hungry) endFeed(f); f.react = 0; return false; }
   if (f.chew > 0) f.chew -= dt;
   if (f.react > 0 && (f.react -= dt) <= 0) f.hungry = true;
   const L = f.L, ch = Math.cos(f.h), sh = Math.sin(f.h);
