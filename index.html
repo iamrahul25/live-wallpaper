@@ -24,10 +24,11 @@ main{max-width:1100px;margin:0 auto;padding:24px 16px 64px;display:grid;gap:20px
 .info{padding:14px 16px 18px}
 .info h2{margin:0 0 4px;font-size:18px}
 .info p{margin:0;color:var(--muted);font-size:14px}
-#viewer{position:fixed;inset:0;background:#000;display:none;z-index:10}
+#viewer{position:fixed;inset:0;background:#000;display:none;z-index:10;overflow:hidden}
 #viewer.open{display:block}
-#viewer iframe{width:100%;height:100%;border:0;display:block}
-.bar{position:absolute;top:12px;right:12px;display:flex;gap:8px;opacity:.85;transition:opacity .4s}
+#viewer iframe{position:absolute;left:50%;top:50%;border:0;display:block;transform:translate(-50%,-50%)}
+#viewer.rot iframe{transform:translate(-50%,-50%) rotate(90deg)}
+.bar{position:absolute;z-index:2;top:12px;left:12px;right:12px;justify-content:space-between;display:flex;gap:8px;opacity:.85;transition:opacity .4s}
 .bar.hide{opacity:0}
 .bar button,.bar a{background:#000a;color:#fff;border:1px solid #fff4;border-radius:8px;padding:8px 12px;font:14px system-ui;cursor:pointer;text-decoration:none}
 footer{text-align:center;color:var(--muted);padding:0 16px 40px;font-size:14px}
@@ -37,7 +38,7 @@ footer a{color:var(--accent)}
 <body>
 <header>
   <h1>Live Wallpapers</h1>
-  <p>Animated wallpapers running live in your browser. Click one to go fullscreen — press Esc to come back.</p>
+  <p>Animated wallpapers running live in your browser. Click one to preview it, then use the Fullscreen and Rotate buttons.</p>
   <a class="fb" id="fbTop" target="_blank" rel="noopener">Give feedback</a>
 </header>
 <main id="grid"></main>
@@ -45,9 +46,12 @@ footer a{color:var(--accent)}
 <div id="viewer">
   <iframe id="frame" allow="fullscreen" title="Wallpaper"></iframe>
   <div class="bar" id="bar">
-    <a id="fbView" target="_blank" rel="noopener">Feedback on this one</a>
-    <button id="fs">Fullscreen</button>
-    <button id="close">Close ✕</button>
+    <button id="close">← Back</button>
+    <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+      <a id="fbView" target="_blank" rel="noopener">Feedback</a>
+      <button id="rot">⟳ Rotate</button>
+      <button id="fs">⛶ Fullscreen</button>
+    </span>
   </div>
 </div>
 <script>
@@ -70,7 +74,7 @@ function open(w){
   $("fbView").href=fbUrl(w.title);
   viewer.classList.add("open");document.body.style.overflow="hidden";
   history.replaceState(null,"","#"+w.id);
-  (viewer.requestFullscreen?.()||Promise.resolve()).catch(()=>{});
+  setRot(false);
   wake();
 }
 function close(){
@@ -78,12 +82,19 @@ function close(){
   history.replaceState(null,"",location.pathname);
   if(document.fullscreenElement)document.exitFullscreen();
 }
+function fit(){
+  const r=viewer.classList.contains("rot"),W=viewer.clientWidth,H=viewer.clientHeight;
+  frame.style.width=(r?H:W)+"px";frame.style.height=(r?W:H)+"px";
+}
+function setRot(on){viewer.classList.toggle("rot",on);fit()}
+$("rot").onclick=()=>setRot(!viewer.classList.contains("rot"));
+addEventListener("resize",fit);
 function wake(){bar.classList.remove("hide");clearTimeout(timer);timer=setTimeout(()=>bar.classList.add("hide"),2500)}
 viewer.addEventListener("mousemove",wake);
 $("close").onclick=close;
-$("fs").onclick=()=>document.fullscreenElement?document.exitFullscreen():viewer.requestFullscreen?.();
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&viewer.classList.contains("open")&&!document.fullscreenElement)close()});
-document.addEventListener("fullscreenchange",()=>{if(!document.fullscreenElement&&viewer.classList.contains("open")){/* Esc exits fullscreen only; keep viewer */}});
+$("fs").onclick=()=>document.fullscreenElement?document.exitFullscreen():viewer.requestFullscreen?.().catch(()=>alert("Fullscreen isn't supported here (on iPhone, use Rotate and Add to Home Screen)."));
+document.addEventListener("fullscreenchange",()=>{$("fs").textContent=document.fullscreenElement?"⛶ Exit fullscreen":"⛶ Fullscreen";fit()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&viewer.classList.contains("open")&&!document.fullscreenElement)close();if(e.key==="r"&&viewer.classList.contains("open"))$("rot").click()});
 Promise.all(list.map(async w=>{
   try{const m=await (await fetch(`wallpapers/${w.id}/wallpaper.json`)).json();return {...w,...m}}
   catch{return {...w,title:w.id,description:""}}
