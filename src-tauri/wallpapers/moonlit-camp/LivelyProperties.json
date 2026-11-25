@@ -1,0 +1,47 @@
+{
+  "leaves": {
+    "type": "slider",
+    "value": 50,
+    "text": "Falling leaves",
+    "min": 0,
+    "max": 100,
+    "step": 1
+  },
+  "fireflies": {
+    "type": "slider",
+    "value": 30,
+    "text": "Fireflies",
+    "min": 0,
+    "max": 80,
+    "step": 1
+  },
+  "weather": {
+    "type": "dropdown",
+    "value": 0,
+    "text": "Weather",
+    "items": ["Clear", "Drizzle", "Rain"]
+  },
+  "mist": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Mist over the lake"
+  },
+  "events": {
+    "type": "checkbox",
+    "value": true,
+    "text": "Shooting stars, jumping fish, bats and the owl"
+  },
+  "clicks": {
+    "type": "checkbox",
+    "value": true,
+    "text": "React to desktop clicks"
+  },
+  "fps": {
+    "type": "slider",
+    "value": 30,
+    "text": "Frame rate cap",
+    "min": 15,
+    "max": 60,
+    "step": 1
+  }
+}

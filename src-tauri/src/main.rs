@@ -10,6 +10,8 @@ mod input;
 mod library;
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -20,6 +22,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const WALLPAPER_LABEL: &str = "wallpaper";
+/// Injected into every wallpaper page; see the comment at the top of bridge.js.
+const BRIDGE_JS: &str = include_str!("bridge.js");
 
 #[derive(Default)]
 struct AppState {
@@ -28,6 +32,8 @@ struct AppState {
     icons_on: AtomicBool,
     /// Latest icon snapshot; served to pages at `/__icons`. Empty until first read.
     icons_json: Mutex<String>,
+    /// settings.json, kept in memory and written back on every change.
+    settings: Mutex<Settings>,
 }
 
 fn icons_snapshot() -> String {
@@ -68,7 +74,12 @@ fn start_icon_poller(app: AppHandle) {
 
 #[derive(Serialize, Deserialize, Default)]
 struct Settings {
+    /// Wallpaper id on the desktop, restored on the next launch.
     active: Option<String>,
+    /// Customize-panel values per wallpaper id, only the ones the user changed:
+    /// `{ "builtin/koi-pond": { "koi": 10, "quality": 3 } }`. Names come from LivelyProperties.json.
+    #[serde(default)]
+    properties: HashMap<String, Map<String, Value>>,
 }
 
 fn settings_path(app: &AppHandle) -> Option<std::path::PathBuf> {
@@ -91,10 +102,44 @@ fn save_settings(app: &AppHandle, s: &Settings) {
     }
 }
 
+/// Changes the in-memory settings and writes settings.json.
+fn update_settings(app: &AppHandle, f: impl FnOnce(&mut Settings)) {
+    let st = app.state::<AppState>();
+    let mut s = st.settings.lock().unwrap();
+    f(&mut s);
+    save_settings(app, &s);
+}
+
 fn set_active(app: &AppHandle, id: Option<String>) {
     *app.state::<AppState>().active.lock().unwrap() = id.clone();
-    save_settings(app, &Settings { active: id.clone() });
+    update_settings(app, |s| s.active = id.clone());
     let _ = app.emit("active-changed", id);
+}
+
+/// Saved Customize values for one wallpaper (empty when the user changed nothing).
+fn saved_properties(app: &AppHandle, id: &str) -> Map<String, Value> {
+    app.state::<AppState>().settings.lock().unwrap().properties.get(id).cloned().unwrap_or_default()
+}
+
+/// The bridge script for a wallpaper page, with its saved values filled in.
+fn bridge_for(app: &AppHandle, id: &str) -> String {
+    let json = serde_json::to_string(&saved_properties(app, id)).unwrap_or_else(|_| "{}".into());
+    // `<` is escaped so a text value containing "</script>" can't end the script tag early.
+    BRIDGE_JS.replace("__LW_PROPS__", &json.replace('<', "\\u003c"))
+}
+
+/// Sends one property to the desktop wallpaper, when `id` is the one showing.
+fn push_property(app: &AppHandle, id: &str, name: &str, value: &Value) {
+    if app.state::<AppState>().active.lock().unwrap().as_deref() != Some(id) {
+        return;
+    }
+    if let Some(win) = app.get_webview_window(WALLPAPER_LABEL) {
+        let name = serde_json::to_string(name).unwrap_or_default();
+        let value = serde_json::to_string(value).unwrap_or_else(|_| "null".into());
+        let _ = win.eval(format!(
+            "window.livelyPropertyListener&&window.livelyPropertyListener({name},{value})"
+        ));
+    }
 }
 
 /// Shows `id` on the desktop, creating and embedding the wallpaper window on first use.
@@ -180,6 +225,48 @@ async fn stop_wallpaper(app: AppHandle) {
     stop(&app);
 }
 
+#[derive(Serialize)]
+struct PropertiesInfo {
+    /// Raw LivelyProperties.json text (parsed in the UI so the controls keep their order).
+    schema: String,
+    /// The user's saved values; missing names use the schema's `value`.
+    values: Map<String, Value>,
+}
+
+/// Customize panel data for a wallpaper, or `None` when it has no LivelyProperties.json.
+#[tauri::command]
+fn get_properties(app: AppHandle, id: String) -> Result<Option<PropertiesInfo>, String> {
+    library::resolve(&app, &id)?;
+    Ok(library::properties_schema(&app, &id)
+        .map(|schema| PropertiesInfo { schema, values: saved_properties(&app, &id) }))
+}
+
+/// Saves one Customize value and applies it to the desktop wallpaper right away if it is showing.
+#[tauri::command]
+fn set_property(app: AppHandle, id: String, name: String, value: Value) -> Result<(), String> {
+    if !library::property_defaults(&app, &id).iter().any(|(k, _)| *k == name) {
+        return Err(format!("'{id}' has no setting named '{name}'"));
+    }
+    update_settings(&app, |s| {
+        s.properties.entry(id.clone()).or_default().insert(name.clone(), value.clone());
+    });
+    push_property(&app, &id, &name, &value);
+    Ok(())
+}
+
+/// Forgets the saved values and sends every default to the desktop wallpaper if it is showing.
+#[tauri::command]
+fn reset_properties(app: AppHandle, id: String) -> Result<(), String> {
+    library::resolve(&app, &id)?;
+    update_settings(&app, |s| {
+        s.properties.remove(&id);
+    });
+    for (name, value) in library::property_defaults(&app, &id) {
+        push_property(&app, &id, &name, &value);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn import_wallpaper(app: AppHandle, path: String) -> Result<library::WallpaperInfo, String> {
     library::import(&app, &path)
@@ -191,7 +278,11 @@ async fn delete_wallpaper(app: AppHandle, id: String) -> Result<(), String> {
     if active.as_deref() == Some(id.as_str()) {
         stop(&app);
     }
-    library::delete(&app, &id)
+    library::delete(&app, &id)?;
+    update_settings(&app, |s| {
+        s.properties.remove(&id);
+    });
+    Ok(())
 }
 
 fn main() {
@@ -209,12 +300,21 @@ fn main() {
                     .body(body.into_bytes())
                     .unwrap();
             }
-            match library::serve(ctx.app_handle(), request.uri().path()) {
-                Some((body, mime)) => Response::builder()
+            let path = request.uri().path();
+            match library::serve(ctx.app_handle(), path) {
+                Some((body, mime)) => {
+                    // A wallpaper's main page gets the bridge (saved Customize values + live updates).
+                    let body = match library::page_id(path) {
+                        Some(id) => library::inject_script(body, &bridge_for(ctx.app_handle(), &id)),
+                        None => body,
+                    };
+                    Response::builder()
                     .header("Content-Type", mime)
                     .header("Access-Control-Allow-Origin", "*")
+                    .header("Cache-Control", "no-store")
                     .body(body)
-                    .unwrap(),
+                    .unwrap()
+                }
                 None => Response::builder().status(404).body(b"Not found".to_vec()).unwrap(),
             }
         })
@@ -224,7 +324,10 @@ fn main() {
             set_wallpaper,
             stop_wallpaper,
             import_wallpaper,
-            delete_wallpaper
+            delete_wallpaper,
+            get_properties,
+            set_property,
+            reset_properties
         ])
         .setup(|app| {
             // Tray: the app keeps running (and the wallpaper keeps playing) when the window closes.
@@ -257,7 +360,10 @@ fn main() {
             input::init(app.handle().clone());
 
             // Restore the last wallpaper.
-            if let Some(id) = load_settings(app.handle()).active {
+            let saved = load_settings(app.handle());
+            let restore = saved.active.clone();
+            *app.state::<AppState>().settings.lock().unwrap() = saved;
+            if let Some(id) = restore {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if show_wallpaper(&handle, &id).is_err() {

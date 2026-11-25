@@ -1,0 +1,27 @@
+Hey everyone! Welcome to Day 1 of building in public.
+
+Today, I want to show you something I've been working on.
+
+It's an interactive Koi Fish wallpaper.
+
+Just click anywhere on the water to drop some fish food, and watch the koi swim towards it and start eating. If the food lands on a lotus leaf, the leaves actually move and react to it.
+
+I've also added a lot of little details to make the pond feel alive: realistic water ripples, tiny air bubbles, soft shadows from the lotus flowers, and much more.
+
+You can customize the experience, too.
+
+Change the number of fish in the pond, adjust the frame rate up to 144 FPS, and choose the rendering quality, from low all the way up to Ultra.
+
+But this is just the beginning.
+
+I'm thinking of adding a day-and-night cycle, so you can experience the pond under moonlight, along with a rainy weather effect, where raindrops create ripples across the water.
+
+And one more thing.
+
+I'm also looking for someone with a similar mindset, who enjoys building products and experimenting with ideas.
+
+I've worked on Android development, and I'd love to collaborate, build, launch, and potentially sell products together.
+
+I think building together is more fun. You share ideas, learn from each other, and create better things.
+
+If that sounds interesting, feel free to DM me. Let's build something together!

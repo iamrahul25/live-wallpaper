@@ -1,0 +1,72 @@
+1
+00:00:00,050 --> 00:00:01,046
+Hey everyone!
+
+2
+00:00:01,046 --> 00:00:03,498
+Welcome to Day 1 of building in public.
+
+3
+00:00:03,602 --> 00:00:05,727
+Today, I want to show you something I've been working on.
+
+4
+00:00:05,834 --> 00:00:08,524
+It's an interactive Koi Fish wallpaper.
+
+5
+00:00:08,642 --> 00:00:14,325
+Just click anywhere on the water to drop some fish food, and watch the koi swim towards it and start eating.
+
+6
+00:00:14,325 --> 00:00:19,578
+If the food lands on a lotus leaf, the leaves actually move and react to it.
+
+7
+00:00:19,682 --> 00:00:30,113
+I've also added a lot of little details to make the pond feel alive: realistic water ripples, tiny air bubbles, soft shadows from the lotus flowers, and much more.
+
+8
+00:00:30,218 --> 00:00:32,608
+You can customize the experience, too.
+
+9
+00:00:32,714 --> 00:00:41,642
+Change the number of fish in the pond, adjust the frame rate up to 144 FPS, and choose the rendering quality, from low all the way up to Ultra.
+
+10
+00:00:41,762 --> 00:00:43,299
+But this is just the beginning.
+
+11
+00:00:43,634 --> 00:00:52,851
+I'm thinking of adding a day-and-night cycle, so you can experience the pond under moonlight, along with a rainy weather effect, where raindrops create ripples across the water.
+
+12
+00:00:52,970 --> 00:00:54,026
+And one more thing.
+
+13
+00:00:54,842 --> 00:01:00,669
+I'm also looking for someone with a similar mindset, who enjoys building products and experimenting with ideas.
+
+14
+00:01:00,770 --> 00:01:08,376
+I've worked on Android development, and I'd love to collaborate, build, launch, and potentially sell products together.
+
+15
+00:01:08,474 --> 00:01:10,852
+I think building together is more fun.
+
+16
+00:01:10,852 --> 00:01:15,143
+You share ideas, learn from each other, and create better things.
+
+17
+00:01:15,242 --> 00:01:18,137
+If that sounds interesting, feel free to DM me.
+
+18
+00:01:18,137 --> 00:01:19,783
+Let's build something together!
+

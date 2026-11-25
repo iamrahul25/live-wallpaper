@@ -1,0 +1,76 @@
+1
+00:00:00,100 --> 00:00:04,340
+Hey everyone, this is Day 1 of building in public.
+
+2
+00:00:04,290 --> 00:00:09,387
+Today I'm going to show you a demo of my Koi Fish live wallpaper.
+
+3
+00:00:09,387 --> 00:00:11,935
+And it's actually interactive.
+
+4
+00:00:11,935 --> 00:00:18,990
+Just click anywhere on the water to drop some fish food, and watch the koi swim over to eat it.
+
+5
+00:00:18,990 --> 00:00:26,670
+If the food lands on a lotus leaf, or a fish swims underneath one, the leaves move and react to it.
+
+6
+00:00:26,670 --> 00:00:35,937
+You've got ripples on the water, tiny air bubbles, soft shadows from the lotus flowers, and a lot more little details like that.
+
+7
+00:00:35,937 --> 00:00:38,425
+You can also customize it.
+
+8
+00:00:38,425 --> 00:00:52,055
+Change how many fish are in the pond, set the frame rate anywhere from 20 all the way up to 144 FPS, and pick the render quality: low, medium, high, or ultra.
+
+9
+00:00:52,055 --> 00:00:59,663
+Next, I'm thinking about adding a day and night cycle, so you can see how the pond looks after dark.
+
+10
+00:00:59,663 --> 00:01:03,557
+And maybe a rainy day effect on the water too.
+
+11
+00:01:03,557 --> 00:01:10,072
+And honestly, if anyone's interested in building this with me, send me a message.
+
+12
+00:01:10,072 --> 00:01:16,766
+I'm looking for someone with a similar mindset to build things with and bounce ideas off.
+
+13
+00:01:16,766 --> 00:01:21,165
+Building together is just way more fun than going solo.
+
+14
+00:01:21,165 --> 00:01:26,129
+Things move faster, and constant discussion makes the app better.
+
+15
+00:01:26,129 --> 00:01:29,747
+I've also worked on Android development.
+
+16
+00:01:29,747 --> 00:01:39,002
+So if you'd like to build this, and sell it, together, drop a DM or a comment, and let's see if we can work together.
+
+17
+00:01:39,002 --> 00:01:41,730
+Oh, and one last thing.
+
+18
+00:01:41,730 --> 00:01:45,709
+How much would you be willing to pay for a wallpaper like this?
+
+19
+00:01:45,709 --> 00:01:48,197
+Let me know in the comments.
+

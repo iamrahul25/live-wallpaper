@@ -1,0 +1,86 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Cap,Segoe UI Semibold,54,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,0,0,0,0,100,100,0,0,1,3.2,1.5,2,200,200,70,1
+Style: Sec,Segoe UI Semibold,44,&H00FFFFFF,&H00FFFFFF,&H5A1F2A14,&H5A1F2A14,0,0,0,0,100,100,1,0,3,16,0,8,200,200,48,1
+Style: Big,Segoe UI Black,150,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,2,0,1,4,3,5,100,100,0,1
+Style: Mid,Segoe UI Semibold,64,&H00F2E6C8,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,1,0,1,3,2,5,100,100,0,1
+Style: Small,Segoe UI,38,&H00DDDDDD,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,1,0,1,2,1,5,100,100,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 1,0:00:00.15,0:00:02.90,Big,,0,0,0,,{\fad(350,300)\pos(960,440)}Day 1
+Dialogue: 1,0:00:00.35,0:00:02.90,Mid,,0,0,0,,{\fad(350,300)\pos(960,585)}Building in Public
+Dialogue: 1,0:00:00.55,0:00:02.90,Small,,0,0,0,,{\fad(350,300)\pos(960,665)}Koi Pond  ·  interactive live wallpaper
+Dialogue: 1,0:01:16.35,0:01:22.10,Mid,,0,0,0,,{\fad(450,500)\pos(960,430)\fs88}Let's build something together
+Dialogue: 1,0:01:16.65,0:01:22.10,Small,,0,0,0,,{\fad(450,500)\pos(960,540)\fs46}Android  ·  Desktop  ·  Products
+Dialogue: 1,0:01:16.95,0:01:22.10,Mid,,0,0,0,,{\fad(450,500)\pos(960,640)\fs58}DM me
+Dialogue: 1,0:00:09.05,0:00:14.62,Sec,,0,0,0,,{\fad(300,300)}Click to feed the koi
+Dialogue: 1,0:00:14.77,0:00:20.07,Sec,,0,0,0,,{\fad(300,300)}Lotus leaves react
+Dialogue: 1,0:00:20.22,0:00:30.37,Sec,,0,0,0,,{\fad(300,300)}Ripples  ·  Bubbles  ·  Shadows
+Dialogue: 1,0:00:30.52,0:00:41.79,Sec,,0,0,0,,{\fad(300,300)}Fish count  ·  up to 144 FPS  ·  Low → Ultra
+Dialogue: 1,0:00:41.94,0:00:53.51,Sec,,0,0,0,,{\fad(300,300)}Coming next: Day & Night  ·  Rain
+Dialogue: 1,0:00:53.66,0:01:16.05,Sec,,0,0,0,,{\fad(300,300)}Looking for a co-builder
+Dialogue: 2,0:00:00.51,0:00:01.54,Cap,,0,0,0,,Hey everyone!
+Dialogue: 2,0:00:01.54,0:00:03.15,Cap,,0,0,0,,Welcome to Day 1 of building
+Dialogue: 2,0:00:03.15,0:00:04.17,Cap,,0,0,0,,in public.
+Dialogue: 2,0:00:04.17,0:00:04.43,Cap,,0,0,0,,Today,
+Dialogue: 2,0:00:04.43,0:00:05.24,Cap,,0,0,0,,I want to show you something
+Dialogue: 2,0:00:05.24,0:00:06.44,Cap,,0,0,0,,I've been working on.
+Dialogue: 2,0:00:06.44,0:00:09.05,Cap,,0,0,0,,It's an interactive Koi Fish wallpaper.
+Dialogue: 2,0:00:09.05,0:00:10.35,Cap,,0,0,0,,Just click anywhere on the water
+Dialogue: 2,0:00:10.35,0:00:11.94,Cap,,0,0,0,,to drop some fish food,
+Dialogue: 2,0:00:11.94,0:00:13.42,Cap,,0,0,0,,and watch the koi swim towards
+Dialogue: 2,0:00:13.42,0:00:14.77,Cap,,0,0,0,,it and start eating.
+Dialogue: 2,0:00:14.77,0:00:15.78,Cap,,0,0,0,,If the food lands on a
+Dialogue: 2,0:00:15.78,0:00:17.01,Cap,,0,0,0,,lotus leaf,
+Dialogue: 2,0:00:17.01,0:00:19.44,Cap,,0,0,0,,the leaves actually move and react
+Dialogue: 2,0:00:19.44,0:00:20.22,Cap,,0,0,0,,to it.
+Dialogue: 2,0:00:20.22,0:00:21.43,Cap,,0,0,0,,I've also added a lot of
+Dialogue: 2,0:00:21.43,0:00:23.05,Cap,,0,0,0,,little details to make the pond
+Dialogue: 2,0:00:23.05,0:00:24.33,Cap,,0,0,0,,feel alive:
+Dialogue: 2,0:00:24.33,0:00:25.86,Cap,,0,0,0,,realistic water ripples,
+Dialogue: 2,0:00:25.86,0:00:27.24,Cap,,0,0,0,,tiny air bubbles,
+Dialogue: 2,0:00:27.24,0:00:29.36,Cap,,0,0,0,,soft shadows from the lotus flowers,
+Dialogue: 2,0:00:29.36,0:00:30.52,Cap,,0,0,0,,and much more.
+Dialogue: 2,0:00:30.52,0:00:32.09,Cap,,0,0,0,,You can customize the experience,
+Dialogue: 2,0:00:32.09,0:00:32.91,Cap,,0,0,0,,too.
+Dialogue: 2,0:00:32.91,0:00:34.05,Cap,,0,0,0,,Change the number of fish in
+Dialogue: 2,0:00:34.05,0:00:34.98,Cap,,0,0,0,,the pond,
+Dialogue: 2,0:00:34.98,0:00:36.21,Cap,,0,0,0,,adjust the frame rate up to
+Dialogue: 2,0:00:36.21,0:00:38.18,Cap,,0,0,0,,144 FPS,
+Dialogue: 2,0:00:38.18,0:00:39.82,Cap,,0,0,0,,and choose the rendering quality,
+Dialogue: 2,0:00:39.82,0:00:40.86,Cap,,0,0,0,,from low all the way up
+Dialogue: 2,0:00:40.86,0:00:41.94,Cap,,0,0,0,,to Ultra.
+Dialogue: 2,0:00:41.94,0:00:43.38,Cap,,0,0,0,,But this is just the beginning.
+Dialogue: 2,0:00:43.82,0:00:45.35,Cap,,0,0,0,,I'm thinking of adding a day-and-night
+Dialogue: 2,0:00:45.35,0:00:46.15,Cap,,0,0,0,,cycle,
+Dialogue: 2,0:00:46.15,0:00:47.69,Cap,,0,0,0,,so you can experience the pond
+Dialogue: 2,0:00:47.69,0:00:48.68,Cap,,0,0,0,,under moonlight,
+Dialogue: 2,0:00:48.68,0:00:50.53,Cap,,0,0,0,,along with a rainy weather effect,
+Dialogue: 2,0:00:50.53,0:00:52.69,Cap,,0,0,0,,where raindrops create ripples across
+Dialogue: 2,0:00:52.69,0:00:53.66,Cap,,0,0,0,,the water.
+Dialogue: 2,0:00:53.66,0:00:55.02,Cap,,0,0,0,,And one more thing.
+Dialogue: 2,0:00:55.54,0:00:56.69,Cap,,0,0,0,,I'm also looking for someone with
+Dialogue: 2,0:00:56.69,0:00:58.05,Cap,,0,0,0,,a similar mindset,
+Dialogue: 2,0:00:58.05,0:01:00.55,Cap,,0,0,0,,who enjoys building products and experimenting
+Dialogue: 2,0:01:00.55,0:01:01.74,Cap,,0,0,0,,with ideas.
+Dialogue: 2,0:01:01.74,0:01:03.17,Cap,,0,0,0,,I've worked on Android development,
+Dialogue: 2,0:01:03.17,0:01:04.05,Cap,,0,0,0,,and
+Dialogue: 2,0:01:04.05,0:01:06.18,Cap,,0,0,0,,I'd love to collaborate,
+Dialogue: 2,0:01:06.18,0:01:06.85,Cap,,0,0,0,,build,
+Dialogue: 2,0:01:06.85,0:01:07.69,Cap,,0,0,0,,launch,
+Dialogue: 2,0:01:07.69,0:01:09.76,Cap,,0,0,0,,and potentially sell products together.
+Dialogue: 2,0:01:09.76,0:01:11.37,Cap,,0,0,0,,I think building together is more
+Dialogue: 2,0:01:11.37,0:01:12.20,Cap,,0,0,0,,fun.
+Dialogue: 2,0:01:12.20,0:01:13.67,Cap,,0,0,0,,You share ideas,
+Dialogue: 2,0:01:13.67,0:01:14.90,Cap,,0,0,0,,learn from each other,
+Dialogue: 2,0:01:14.90,0:01:16.60,Cap,,0,0,0,,and create better things.
+Dialogue: 2,0:01:16.60,0:01:17.89,Cap,,0,0,0,,If that sounds interesting,
+Dialogue: 2,0:01:17.89,0:01:19.53,Cap,,0,0,0,,feel free to DM me.
+Dialogue: 2,0:01:19.53,0:01:20.97,Cap,,0,0,0,,Let's build something together!

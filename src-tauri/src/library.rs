@@ -14,6 +14,8 @@ pub struct WallpaperInfo {
     pub description: String,
     pub accent: [String; 2],
     pub url: String,
+    /// Has a `LivelyProperties.json`, so the library shows a Customize panel for it.
+    pub customizable: bool,
 }
 
 #[derive(Deserialize, Serialize, Default)]
@@ -28,6 +30,10 @@ struct Meta {
     #[serde(rename = "usesClicks", default, skip_serializing_if = "Option::is_none")]
     uses_clicks: Option<bool>,
 }
+
+/// Customization controls, in Lively's format: `{ "<name>": { "type", "value", "text", ... } }`.
+/// Supported types: slider (min, max, step), checkbox, dropdown (items; value = index), color, textbox.
+pub const PROPS_FILE: &str = "LivelyProperties.json";
 
 const PALETTE: [&str; 6] = ["#6aa8ff", "#8b7bff", "#ff6b9a", "#ffb84d", "#3ddc97", "#4cc9f0"];
 
@@ -69,6 +75,7 @@ fn info_for(dir: &Path, source: &str, folder: &str) -> WallpaperInfo {
             [PALETTE[h % 6].to_string(), PALETTE[(h / 6 + 1) % 6].to_string()]
         }),
         url: url_for(&id),
+        customizable: dir.join(PROPS_FILE).is_file(),
         source: source.to_string(),
         id,
     }
@@ -124,6 +131,24 @@ pub fn uses_clicks(app: &AppHandle, id: &str) -> bool {
         .and_then(|s| serde_json::from_str::<Meta>(&s).ok())
         .and_then(|m| m.uses_clicks)
         .unwrap_or(false)
+}
+
+/// Raw text of the wallpaper's `LivelyProperties.json`. Sent to the UI unparsed so the
+/// controls keep the order they are written in (serde_json maps would sort the keys).
+pub fn properties_schema(app: &AppHandle, id: &str) -> Option<String> {
+    resolve(app, id).ok().and_then(|d| fs::read_to_string(d.join(PROPS_FILE)).ok())
+}
+
+/// The default `value` of every property in `LivelyProperties.json` (for "Reset to defaults").
+pub fn property_defaults(app: &AppHandle, id: &str) -> Vec<(String, serde_json::Value)> {
+    properties_schema(app, id)
+        .and_then(|s| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&s).ok())
+        .map(|m| {
+            m.into_iter()
+                .filter_map(|(k, v)| v.get("value").cloned().map(|val| (k, val)))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn slug(s: &str) -> String {
@@ -247,4 +272,68 @@ pub fn serve(app: &AppHandle, url_path: &str) -> Option<(Vec<u8>, &'static str)>
     }
     let bytes = fs::read(&path).ok()?;
     Some((bytes, mime(&path)))
+}
+
+/// The wallpaper id when `url_path` is a wallpaper's main page (`/<source>/<folder>/index.html`).
+/// Only that page gets the host bridge injected; other files are served untouched.
+pub fn page_id(url_path: &str) -> Option<String> {
+    let decoded = percent_decode(url_path);
+    let parts: Vec<&str> = decoded.trim_start_matches('/').split('/').collect();
+    match parts.as_slice() {
+        [source, folder, file] if file.eq_ignore_ascii_case("index.html") && safe_segment(folder) => {
+            Some(format!("{source}/{folder}"))
+        }
+        _ => None,
+    }
+}
+
+/// Inserts `<script>{script}</script>` at the start of `<head>` (so it runs before the page's own
+/// scripts), else after `<html ...>`, else after the doctype, else at the very top.
+pub fn inject_script(html: Vec<u8>, script: &str) -> Vec<u8> {
+    let text = String::from_utf8_lossy(&html);
+    let lower = text.to_ascii_lowercase();
+    // End of the first `<tag>` / `<tag ...>` (so "<head" never matches "<header").
+    let after_tag = |tag: &str| {
+        lower.match_indices(tag).map(|(i, _)| i).find(|&i| {
+            matches!(lower.as_bytes().get(i + tag.len()), Some(b'>' | b' ' | b'\t' | b'\r' | b'\n'))
+        })
+        .and_then(|i| lower[i..].find('>').map(|j| i + j + 1))
+    };
+    let at = after_tag("<head").or_else(|| after_tag("<html")).or_else(|| after_tag("<!doctype")).unwrap_or(0);
+    let mut out = String::with_capacity(text.len() + script.len() + 20);
+    out.push_str(&text[..at]);
+    out.push_str("<script>");
+    out.push_str(script);
+    out.push_str("</script>");
+    out.push_str(&text[at..]);
+    out.into_bytes()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_id_only_matches_main_pages() {
+        assert_eq!(page_id("/builtin/koi-pond/index.html").as_deref(), Some("builtin/koi-pond"));
+        assert_eq!(page_id("/user/my%20wall/index.html").as_deref(), Some("user/my wall"));
+        assert_eq!(page_id("/builtin/koi-pond/js/main.js"), None);
+        assert_eq!(page_id("/builtin/koi-pond/sub/index.html"), None);
+        assert_eq!(page_id("/builtin/../index.html"), None);
+    }
+
+    fn inject(html: &str) -> String {
+        String::from_utf8(inject_script(html.as_bytes().to_vec(), "X")).unwrap()
+    }
+
+    #[test]
+    fn inject_goes_first_in_head() {
+        assert_eq!(inject("<!doctype html><html><head><title>t</title></head>"),
+                   "<!doctype html><html><head><script>X</script><title>t</title></head>");
+        assert_eq!(inject("<HTML><HEAD lang=en><b>"), "<HTML><HEAD lang=en><script>X</script><b>");
+        // no <head>: after <html>, never inside <header>
+        assert_eq!(inject("<html><body><header>h</header>"), "<html><script>X</script><body><header>h</header>");
+        assert_eq!(inject("<!DOCTYPE html><canvas>"), "<!DOCTYPE html><script>X</script><canvas>");
+        assert_eq!(inject("<canvas>"), "<script>X</script><canvas>");
+    }
 }

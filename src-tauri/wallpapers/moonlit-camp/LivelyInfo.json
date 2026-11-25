@@ -1,0 +1,14 @@
+{
+  "AppVersion": "1.0.0.0",
+  "Title": "Moonlit Camp",
+  "Thumbnail": "thumb.jpg",
+  "Preview": null,
+  "Desc": "Pixel-art night by the lake: a flickering campfire, falling maple leaves, fireflies, a bobbing fishing float, shooting stars. Click the fire, water, sky, moon, tent or tree.",
+  "Author": "",
+  "License": "",
+  "Contact": "",
+  "Type": 1,
+  "FileName": "index.html",
+  "Arguments": null,
+  "IsAbsolutePath": false
+}

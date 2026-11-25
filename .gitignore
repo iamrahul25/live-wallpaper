@@ -3,3 +3,6 @@ src-tauri/target/
 src-tauri/gen/
 *.log
 .DS_Store
+
+# promo renders (too large for GitHub, keep locally)
+promo/*.mp4

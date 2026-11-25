@@ -45,10 +45,13 @@ Footprint, honestly: the installer is small, but **RAM** comes from WebView2 (ab
 
 ```
 my-wallpaper/
-  index.html        (required)
-  wallpaper.json    (optional) { "title", "description", "accent": ["#hex", "#hex"] }
+  index.html             (required)
+  wallpaper.json         (optional) { "title", "description", "accent": ["#hex", "#hex"], "usesIcons", "usesClicks" }
+  LivelyProperties.json  (optional) Customize-panel controls, Lively's format (slider, checkbox, dropdown, color, textbox, label)
   any .js/.css/images
 ```
+
+**Customization.** When `LivelyProperties.json` exists, the library shows a Customize panel with a live preview. Saved values live in `settings.json` under `properties.<id>`. The app injects `src-tauri/src/bridge.js` at the top of every wallpaper's `index.html` that it serves. The bridge sets `window.__lwProps` (the saved values, before the page's scripts run), calls `livelyPropertyListener(name, value)` once for each saved value on load, and forwards the preview's `postMessage({ type: "lw:property", name, value })`. Live changes reach the desktop wallpaper through `eval` of `livelyPropertyListener`. A wallpaper only has to implement `livelyPropertyListener`, which is the same thing Lively needs. `koi-pond/README.md` is the worked example.
 
 ## 4. Milestones
 
@@ -69,7 +72,7 @@ my-wallpaper/
 - Single instance (`tauri-plugin-single-instance`)
 
 **M3 — Features that make it worth money**
-- Customize panel per wallpaper (`LivelyProperties`-style JSON gives sliders and colors, sent to the page)
+- [x] Customize panel per wallpaper (`LivelyProperties.json` gives sliders, dropdowns, switches and colours, with a live preview; values are saved and sent to the page). Koi Pond and Hollow King have one; Neon Rain still needs a `LivelyProperties.json`
 - Video wallpapers (`<video>` inside the WebView, so no extra engine is needed)
 - Online gallery (a static JSON on GitHub Pages or a CDN, downloaded on demand to keep the installer small)
 - Audio-reactive wallpapers (WASAPI loopback, then data posted to the page)

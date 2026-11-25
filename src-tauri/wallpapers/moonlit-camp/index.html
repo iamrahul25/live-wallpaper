@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Moonlit Camp</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#050914}
+canvas{position:absolute;display:block;image-rendering:pixelated}
+</style></head>
+<body><canvas id="c"></canvas>
+<!--
+  Moonlit Camp: a pixel-art night by the lake. A boy fishes beside his campfire under a red maple,
+  the moon shines on the water, fireflies drift and leaves fall. Raw WebGL2, no libraries.
+  See README.md in this folder for the module map, the click map and the settings contract.
+
+  Plain (classic) scripts sharing one global scope, so the page also runs from file://.
+  ORDER MATTERS: each file may use what the files above it define.
+
+  Options: ?fps=30 ?leaves=0..100 ?fireflies=0..80 ?rain=0|1|2 ?mist=0 ?events=0 ?clicks=0
+           ?seed=n ?t=seconds ?still (one settled frame) ?debug
+-->
+<script src="js/assets.js"></script>
+<script src="js/config.js"></script>
+<script src="js/world.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/fire.js"></script>
+<script src="js/water.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/nature.js"></script>
+<script src="js/events.js"></script>
+<script src="js/gl.js"></script>
+<script src="js/loop.js"></script>
+<script src="js/host.js"></script>
+<script src="js/main.js"></script>
+</body></html>
